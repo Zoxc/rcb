@@ -3,12 +3,18 @@ use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use serde_derive::Deserialize;
 use std::{
     fs,
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
 };
+
+#[derive(Deserialize, Debug)]
+struct Bench {
+    cargo_dir: Option<String>,
+}
 
 struct BenchConfig {
     incremental: bool,
@@ -52,12 +58,12 @@ impl Config {
             )
             .env("CARGO_INCREMENTAL", "0")
             .env("CARGO_TARGET_DIR", self.path().join("target"))
-            .arg("rustc")
-            .arg("-vv");
+            .arg("rustc");
+        //.arg("-vv");
 
         println!("cargo {:#?}", output);
 
-        output.status().ok();
+        t!(output.status());
         /*   .output()
             .expect("failed to execute process");
 
@@ -99,6 +105,8 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             let path = f.path();
             let name = path.file_name().unwrap();
             if t!(f.file_type()).is_dir() {
+                let bench = t!(fs::read_to_string(path.join("bench.toml")));
+                let bench: Bench = t!(toml::from_str(&bench));
                 println!("Benchmark {}", path.display());
                 let name = name.to_string_lossy().into_owned();
                 Some((name, path))
