@@ -1,3 +1,4 @@
+use crate::Build;
 use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
@@ -31,14 +32,16 @@ pub fn remove_recursively(path: &Path) {
 }
 
 /// Copies a file from `src` to `dst`
-pub fn copy(_state: &State, src: &Path, dst: &Path) {
+pub fn copy(state: &State, src: &Path, dst: &Path) {
     if src == dst {
         return;
     }
     let metadata = t!(src.symlink_metadata());
     if metadata.file_type().is_symlink() {
         let link = t!(fs::read_link(src));
-        println!("Skipping {} linking to {}", src.display(), link.display());
+        if state.verbose {
+            println!("Skipping {} linking to {}", src.display(), link.display());
+        }
         return;
     }
     if let Err(e) = fs::copy(src, dst) {
@@ -181,14 +184,16 @@ fn get_build_signature(dir: &Path) -> (String, u64) {
 fn find_build_name(state: &State, prefix: &str, signature: &str) -> (String, PathBuf) {
     let mut i = 1;
     loop {
-        let candidate = format!("{}-{}", prefix, &signature[0..i]);
+        let candidate = format!("{}~{}", prefix, &signature[0..i]);
 
         let candidate_path = state.root.join("builds").join(&candidate);
 
         if !candidate_path.exists() {
             return (candidate, candidate_path);
         } else {
-            if t!(fs::read_to_string(candidate_path.join("signature"))) == signature {
+            let build = t!(fs::read_to_string(candidate_path.join("build.toml")));
+            let build: Build = t!(toml::from_str(&build));
+            if build.signature == signature {
                 panic!("Build already exists as {}", candidate);
             }
         }
@@ -249,47 +254,40 @@ pub fn fetch(state: State, matches: &ArgMatches) {
         remove_recursively(&tmp_path2);
     });
 
-    println!("tmp_path {}", tmp_path.display());
-
     copy_recursively(&state, &stage1, &tmp_path.join("stage1"));
 
     let (signature, build_size) = get_build_signature(&tmp_path);
 
-    println!("Build signature is: {:?}", signature);
-
     let (name, build_path) = find_build_name(
         &state,
-        &format!("{}-{}", repo, branch.as_deref().unwrap_or("")),
+        &format!("{}~{}", repo, branch.as_deref().unwrap_or("")),
         &signature,
     );
 
     t!(fs::rename(&tmp_path, &build_path));
 
     {
-        let mut file = t!(File::create(build_path.join("signature")));
-        t!(file.write_all(signature.as_bytes()));
+        let build = Build {
+            repo,
+            repo_path: repo_path.clone(),
+            branch,
+            commit,
+            size: build_size,
+            size_display: kib::format(build_size),
+            signature,
+        };
+        let mut file = t!(File::create(build_path.join("build.toml")));
+        t!(file.write_all(toml::to_string_pretty(&build).unwrap().as_bytes()));
     }
 
     {
-        let mut file = t!(File::create(build_path.join("info.txt")));
-        let info = format!(
-            "Git branch: {}\nGit commit: {}\nBuild size: {} ({} bytes)\n",
-            branch.unwrap_or_default(),
-            commit.unwrap_or_default(),
-            kib::format(build_size),
-            build_size,
-        );
-        t!(file.write_all(info.as_bytes()));
+        let build_config = t!(fs::read_to_string(repo_path.join("config.toml")));
+        let build_config: toml::Value = toml::from_str(&build_config).expect("Invalid config.toml");
+        let mut file = t!(File::create(build_path.join("config.toml")));
+        t!(file.write_all(toml::to_string_pretty(&build_config).unwrap().as_bytes()));
     }
 
-    copy(
-        &state,
-        &repo_path.join("config.toml"),
-        &build_path.join("config.toml"),
-    );
-
-    println!("Build name is: {:?}", name,);
-    println!("Build size: {:?}", kib::format(build_size));
+    println!("Build {} ({})", name, kib::format(build_size));
 
     if !rustc.exists() {
         panic!("Could not find build executable at `{}`", rustc.display());

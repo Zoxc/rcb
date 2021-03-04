@@ -1,6 +1,6 @@
 use clap::SubCommand;
 use clap::{App, AppSettings, Arg};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
 use toml;
 
@@ -45,6 +45,17 @@ macro_rules! t {
 
 mod fetch;
 
+#[derive(Serialize, Deserialize, Debug)]
+struct Build {
+    repo: String,
+    repo_path: PathBuf,
+    branch: Option<String>,
+    commit: Option<String>,
+    size_display: String,
+    size: u64,
+    signature: String,
+}
+
 #[derive(Deserialize, Debug)]
 struct Repo {
     path: PathBuf,
@@ -61,6 +72,7 @@ struct Config {
 pub struct State {
     root: PathBuf,
     config: Config,
+    verbose: bool,
 }
 
 impl State {
@@ -131,9 +143,12 @@ fn main() {
         .to_owned();
 
     println!("Root is {}", root.display());
-    println!("Config {:#?}", config);
 
-    let state = State { root, config };
+    let state = State {
+        root,
+        config,
+        verbose: false,
+    };
 
     if let Some(matches) = matches.subcommand_matches("fetch") {
         fetch::fetch(state, matches);
