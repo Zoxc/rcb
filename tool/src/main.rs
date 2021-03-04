@@ -4,6 +4,27 @@ use serde_derive::Deserialize;
 use std::{collections::HashMap, path::PathBuf};
 use toml;
 
+/// A helper macro to `unwrap` a result except also print out details like:
+///
+/// * The file/line of the panic
+/// * The expression that failed
+/// * The error itself
+macro_rules! t {
+    ($e:expr) => {
+        match $e {
+            Ok(e) => e,
+            Err(e) => panic!("{} failed with {}", stringify!($e), e),
+        }
+    };
+    // it can show extra info in the second parameter
+    ($e:expr, $extra:expr) => {
+        match $e {
+            Ok(e) => e,
+            Err(e) => panic!("{} failed with {} ({:?})", stringify!($e), e, $extra),
+        }
+    };
+}
+
 mod fetch;
 
 #[derive(Deserialize, Debug)]
@@ -20,6 +41,7 @@ struct Config {
 
 #[derive(Debug)]
 pub struct State {
+    root: PathBuf,
     config: Config,
 }
 
@@ -83,12 +105,17 @@ fn main() {
         ),
     };
 
-    let root = config.root.as_ref().map(|root| &**root).unwrap_or(exe_path);
+    let root = config
+        .root
+        .as_ref()
+        .map(|root| &**root)
+        .unwrap_or(exe_path)
+        .to_owned();
 
     println!("Root is {}", root.display());
     println!("Config {:#?}", config);
 
-    let state = State { config };
+    let state = State { root, config };
 
     if let Some(matches) = matches.subcommand_matches("fetch") {
         fetch::fetch(state, matches);
