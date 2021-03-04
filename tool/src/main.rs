@@ -1,7 +1,14 @@
 use clap::SubCommand;
 use clap::{App, AppSettings, Arg};
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs, iter,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use toml;
 
 pub struct OnDrop<F: Fn()>(pub F);
@@ -43,10 +50,12 @@ macro_rules! t {
     };
 }
 
+mod bench;
 mod fetch;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Build {
+    name: String,
     repo: String,
     repo_path: PathBuf,
     branch: Option<String>,
@@ -54,6 +63,7 @@ struct Build {
     size_display: String,
     size: u64,
     signature: String,
+    triple: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -104,11 +114,49 @@ impl State {
     }
 }
 
+fn remove_recursively(path: &Path) {
+    if !path.exists() {
+        return;
+    }
+    for f in t!(fs::read_dir(path)) {
+        let f = t!(f);
+        let path = f.path();
+        if t!(f.file_type()).is_dir() {
+            remove_recursively(&path);
+        } else {
+            t!(fs::remove_file(path));
+        }
+    }
+    fs::remove_dir(path).ok();
+}
+
+fn temp_dir(parent: &Path) -> PathBuf {
+    let mut attempts = 0;
+    let mut rng = rand::thread_rng();
+    loop {
+        let temp_name: String = iter::repeat(())
+            .map(|()| rng.sample(Alphanumeric))
+            .map(char::from)
+            .take(32)
+            .collect();
+        let tmp = parent.join(&temp_name).to_owned();
+        if fs::create_dir(&tmp).is_ok() {
+            return tmp;
+        }
+        attempts += 1;
+
+        if attempts > 10 {
+            panic!("Failed to create temporary directory");
+        }
+    }
+}
+
 fn main() {
     let fetch = SubCommand::with_name("fetch")
         .arg(Arg::with_name("ref").long("ref"))
         .arg(Arg::with_name("REPO"));
-    let bench = SubCommand::with_name("bench").arg(Arg::with_name("REPO-OR-BUILD").multiple(true));
+    let bench =
+        SubCommand::with_name("bench").arg(Arg::with_name("BUILD").multiple(true).required(true));
     let matches = App::new("rcb")
         .about("Rust Compiler Bencher")
         .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -144,13 +192,15 @@ fn main() {
 
     println!("Root is {}", root.display());
 
-    let state = State {
+    let state = Arc::new(State {
         root,
         config,
         verbose: false,
-    };
+    });
 
     if let Some(matches) = matches.subcommand_matches("fetch") {
         fetch::fetch(state, matches);
+    } else if let Some(matches) = matches.subcommand_matches("bench") {
+        bench::bench(state, matches);
     }
 }

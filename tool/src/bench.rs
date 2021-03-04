@@ -1,8 +1,14 @@
 use crate::Build;
+use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::fs;
+use std::{
+    fs,
+    path::PathBuf,
+    process::{Command, Stdio},
+    sync::Arc,
+};
 
 struct BenchConfig {
     incremental: bool,
@@ -15,7 +21,55 @@ enum BenchMode {
     Release,
 }
 
-pub fn bench(state: State, matches: &ArgMatches) {
+struct Config {
+    session_dir: PathBuf,
+    state: Arc<State>,
+    build: String,
+    bench: String,
+}
+
+impl Config {
+    fn path(&self) -> PathBuf {
+        self.session_dir.join(&self.build).join(&self.bench)
+    }
+
+    fn prepare(&self) {
+        t!(fs::create_dir_all(self.path()));
+
+        let mut output = Command::new("cargo");
+        output
+            .current_dir(self.state.root.join("benchs").join(&self.bench))
+            .stdin(Stdio::null())
+            .env(
+                "RUSTC",
+                self.state
+                    .root
+                    .join("builds")
+                    .join(&self.build)
+                    .join("stage1")
+                    .join("bin")
+                    .join("rustc"),
+            )
+            .env("CARGO_INCREMENTAL", "0")
+            .env("CARGO_TARGET_DIR", self.path().join("target"))
+            .arg("rustc")
+            .arg("-vv");
+
+        println!("cargo {:#?}", output);
+
+        output.status().ok();
+        /*   .output()
+            .expect("failed to execute process");
+
+        if output.status.success() {
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        } else {
+            None
+        }*/
+    }
+}
+
+pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let builds: Vec<Build> = matches
         .values_of("BUILD")
         .unwrap()
@@ -45,18 +99,43 @@ pub fn bench(state: State, matches: &ArgMatches) {
             let path = f.path();
             let name = path.file_name().unwrap();
             if t!(f.file_type()).is_dir() {
-                Some(path)
+                println!("Benchmark {}", path.display());
+                let name = name.to_string_lossy().into_owned();
+                Some((name, path))
             } else {
                 None
             }
         })
         .collect();
 
+    t!(fs::create_dir_all(state.root.join("tmp")));
     let session_dir = crate::temp_dir(&state.root.join("tmp"));
 
-    t!(fs::create_dir_all(session_dir));
+    let session_dir2 = session_dir.clone();
+    let state2 = state.clone();
+    let _drop_session_dir = OnDrop(move || {
+        //crate::remove_recursively(&session_dir2);
+        fs::remove_dir(state2.root.join("tmp")).ok();
+    });
 
-    builds
-        .par_iter()
-        .for_each(|build| t!(fs::create_dir_all("path")))
+    let configs: Vec<Config> = builds
+        .iter()
+        .flat_map(|build| {
+            let state = state.clone();
+            let benchs: Vec<_> = benchs
+                .iter()
+                .map(|bench| Config {
+                    session_dir: session_dir.clone(),
+                    state: state.clone(),
+                    build: build.name.clone(),
+                    bench: bench.0.clone(),
+                })
+                .collect();
+            benchs
+        })
+        .collect();
+
+    configs.par_iter().for_each(|config| {
+        config.prepare();
+    })
 }

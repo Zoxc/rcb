@@ -1,35 +1,18 @@
+use crate::temp_dir;
 use crate::Build;
 use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
 use data_encoding::HEXLOWER;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
 use rayon::prelude::*;
 use ring::digest::{Context, SHA256};
-use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
-use std::{ffi::OsStr, io, iter, path::PathBuf, process::Command};
+use std::{convert::TryFrom, sync::Arc};
+use std::{ffi::OsStr, io, path::PathBuf, process::Command};
 use std::{fs, path::Path};
 
 const TRIPLE: &str = env!("TARGET");
-
-pub fn remove_recursively(path: &Path) {
-    if !path.exists() {
-        return;
-    }
-    for f in t!(fs::read_dir(path)) {
-        let f = t!(f);
-        let path = f.path();
-        if t!(f.file_type()).is_dir() {
-            remove_recursively(&path);
-        } else {
-            t!(fs::remove_file(path));
-        }
-    }
-    fs::remove_dir(path).ok();
-}
 
 /// Copies a file from `src` to `dst`
 pub fn copy(state: &State, src: &Path, dst: &Path) {
@@ -125,27 +108,6 @@ fn sha256_from_file(path: &Path, context: &mut Context) -> io::Result<()> {
     sha256_digest(reader, context)
 }
 
-fn temp_dir(state: &State) -> PathBuf {
-    let mut attempts = 0;
-    let mut rng = rand::thread_rng();
-    loop {
-        let temp_name: String = iter::repeat(())
-            .map(|()| rng.sample(Alphanumeric))
-            .map(char::from)
-            .take(32)
-            .collect();
-        let tmp = state.root.join("builds").join(&temp_name).to_owned();
-        if fs::create_dir(&tmp).is_ok() {
-            return tmp;
-        }
-        attempts += 1;
-
-        if attempts > 10 {
-            panic!("Failed to create temporary build directory");
-        }
-    }
-}
-
 fn get_build_signature(dir: &Path) -> (String, u64) {
     let mut files = Vec::new();
 
@@ -206,7 +168,7 @@ fn find_build_name(state: &State, prefix: &str, signature: &str) -> (String, Pat
     }
 }
 
-pub fn fetch(state: State, matches: &ArgMatches) {
+pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
     t!(fs::create_dir_all(state.root.join("builds")));
 
     let repo = matches
@@ -247,11 +209,11 @@ pub fn fetch(state: State, matches: &ArgMatches) {
         _ => (),
     }
 
-    let tmp_path = temp_dir(&state);
+    let tmp_path = temp_dir(&state.root.join("builds"));
 
     let tmp_path2 = tmp_path.clone();
     let _drop_tmp_dir = OnDrop(move || {
-        remove_recursively(&tmp_path2);
+        crate::remove_recursively(&tmp_path2);
     });
 
     copy_recursively(&state, &stage1, &tmp_path.join("stage1"));
@@ -268,6 +230,7 @@ pub fn fetch(state: State, matches: &ArgMatches) {
 
     {
         let build = Build {
+            name: name.clone(),
             repo,
             repo_path: repo_path.clone(),
             branch,
@@ -275,6 +238,7 @@ pub fn fetch(state: State, matches: &ArgMatches) {
             size: build_size,
             size_display: kib::format(build_size),
             signature,
+            triple: TRIPLE.to_owned(),
         };
         let mut file = t!(File::create(build_path.join("build.toml")));
         t!(file.write_all(toml::to_string_pretty(&build).unwrap().as_bytes()));
