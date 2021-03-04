@@ -613,6 +613,7 @@ another matching engine with fixed memory requirements.
 [`RegexBuilder::dfa_size_limit`](struct.RegexBuilder.html#method.dfa_size_limit).)
 */
 
+#![allow(warnings)]
 #![deny(missing_docs)]
 #![cfg_attr(test, deny(warnings))]
 #![cfg_attr(feature = "pattern", feature(pattern))]

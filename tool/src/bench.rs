@@ -6,14 +6,20 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde_derive::Deserialize;
 use std::{
     fs,
+    path::Path,
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
 };
 
-#[derive(Deserialize, Debug)]
-struct Bench {
+#[derive(Deserialize)]
+struct BenchToml {
     cargo_dir: Option<String>,
+}
+
+struct Bench {
+    name: String,
+    cargo_dir: PathBuf,
 }
 
 struct BenchConfig {
@@ -31,12 +37,16 @@ struct Config {
     session_dir: PathBuf,
     state: Arc<State>,
     build: String,
-    bench: String,
+    bench: Arc<Bench>,
 }
 
 impl Config {
+    fn display(&self) -> String {
+        format!("benchmark `{}` with build ``", self.bench.name, self.build)
+    }
+
     fn path(&self) -> PathBuf {
-        self.session_dir.join(&self.build).join(&self.bench)
+        self.session_dir.join(&self.build).join(&self.bench.name)
     }
 
     fn prepare(&self) {
@@ -44,7 +54,7 @@ impl Config {
 
         let mut output = Command::new("cargo");
         output
-            .current_dir(self.state.root.join("benchs").join(&self.bench))
+            .current_dir(&self.bench.cargo_dir)
             .stdin(Stdio::null())
             .env(
                 "RUSTC",
@@ -56,22 +66,25 @@ impl Config {
                     .join("bin")
                     .join("rustc"),
             )
+            .env("RUSTFLAGS", "-Ztime")
             .env("CARGO_INCREMENTAL", "0")
             .env("CARGO_TARGET_DIR", self.path().join("target"))
-            .arg("rustc");
+            .arg("check");
         //.arg("-vv");
 
         println!("cargo {:#?}", output);
 
-        t!(output.status());
-        /*   .output()
-            .expect("failed to execute process");
+        let output = t!(output.output());
 
-        if output.status.success() {
-            Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-        } else {
-            None
-        }*/
+        if !output.status.success() {
+            //println!(output.stdout.)
+            panic!(
+                "Unable to prepare config - build:{} bench:{}",
+                self.build, self.bench.name
+            );
+        }
+
+        println!("Prepared {}", self.display());
     }
 }
 
@@ -99,17 +112,20 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         })
         .collect();
 
-    let benchs: Vec<_> = t!(fs::read_dir(state.root.join("benchs")))
+    let benchs: Vec<Arc<Bench>> = t!(fs::read_dir(state.root.join("benchs")))
         .filter_map(|f| {
             let f = t!(f);
             let path = f.path();
             let name = path.file_name().unwrap();
             if t!(f.file_type()).is_dir() {
-                let bench = t!(fs::read_to_string(path.join("bench.toml")));
-                let bench: Bench = t!(toml::from_str(&bench));
+                let info = t!(fs::read_to_string(path.join("bench.toml")));
+                let info: BenchToml = t!(toml::from_str(&info));
                 println!("Benchmark {}", path.display());
                 let name = name.to_string_lossy().into_owned();
-                Some((name, path))
+                Some(Arc::new(Bench {
+                    name,
+                    cargo_dir: path.join(info.cargo_dir.unwrap_or(".".to_owned())),
+                }))
             } else {
                 None
             }
@@ -136,7 +152,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
                     session_dir: session_dir.clone(),
                     state: state.clone(),
                     build: build.name.clone(),
-                    bench: bench.0.clone(),
+                    bench: bench.clone(),
                 })
                 .collect();
             benchs
