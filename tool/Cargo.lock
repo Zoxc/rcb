@@ -154,6 +154,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "kib"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f283b673e214ea89f909980d62335eb6897d56aeacdae0958bbdd07b99ea6226"
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -294,6 +300,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "data-encoding",
+ "kib",
  "rand",
  "rayon",
  "ring",

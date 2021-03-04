@@ -1,20 +1,37 @@
+use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
 use data_encoding::HEXLOWER;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use rayon::prelude::*;
-use ring::digest::{Context, Digest, SHA256};
+use ring::digest::{Context, SHA256};
 use std::convert::TryFrom;
+use std::fs::File;
 use std::io::{BufReader, Read, Write};
-use std::{convert::TryInto, fs::File};
-use std::{ffi::OsStr, io, iter, path::PathBuf, process::Command, time::Instant};
+use std::{ffi::OsStr, io, iter, path::PathBuf, process::Command};
 use std::{fs, path::Path};
 
 const TRIPLE: &str = env!("TARGET");
 
+pub fn remove_recursively(path: &Path) {
+    if !path.exists() {
+        return;
+    }
+    for f in t!(fs::read_dir(path)) {
+        let f = t!(f);
+        let path = f.path();
+        if t!(f.file_type()).is_dir() {
+            remove_recursively(&path);
+        } else {
+            t!(fs::remove_file(path));
+        }
+    }
+    fs::remove_dir(path).ok();
+}
+
 /// Copies a file from `src` to `dst`
-pub fn copy(state: &State, src: &Path, dst: &Path) {
+pub fn copy(_state: &State, src: &Path, dst: &Path) {
     if src == dst {
         return;
     }
@@ -105,7 +122,7 @@ fn sha256_from_file(path: &Path, context: &mut Context) -> io::Result<()> {
     sha256_digest(reader, context)
 }
 
-fn temp_dir(state: &State) -> (String, PathBuf) {
+fn temp_dir(state: &State) -> PathBuf {
     let mut attempts = 0;
     let mut rng = rand::thread_rng();
     loop {
@@ -116,7 +133,7 @@ fn temp_dir(state: &State) -> (String, PathBuf) {
             .collect();
         let tmp = state.root.join("builds").join(&temp_name).to_owned();
         if fs::create_dir(&tmp).is_ok() {
-            return (temp_name, tmp);
+            return tmp;
         }
         attempts += 1;
 
@@ -126,12 +143,17 @@ fn temp_dir(state: &State) -> (String, PathBuf) {
     }
 }
 
-fn get_build_signature(dir: &Path) -> String {
+fn get_build_signature(dir: &Path) -> (String, u64) {
     let mut files = Vec::new();
 
     list_files(&dir, &Path::new(""), &mut files);
 
     files.sort();
+
+    let size = files
+        .iter()
+        .map(|file| t!(dir.join(file).metadata()).len())
+        .sum();
 
     let digests: Vec<_> = files
         .par_iter()
@@ -153,7 +175,30 @@ fn get_build_signature(dir: &Path) -> String {
 
     let signature = context.finish();
 
-    HEXLOWER.encode(signature.as_ref())
+    (HEXLOWER.encode(signature.as_ref()), size)
+}
+
+fn find_build_name(state: &State, prefix: &str, signature: &str) -> (String, PathBuf) {
+    let mut i = 1;
+    loop {
+        let candidate = format!("{}-{}", prefix, &signature[0..i]);
+
+        let candidate_path = state.root.join("builds").join(&candidate);
+
+        if !candidate_path.exists() {
+            return (candidate, candidate_path);
+        } else {
+            if t!(fs::read_to_string(candidate_path.join("signature"))) == signature {
+                panic!("Build already exists as {}", candidate);
+            }
+        }
+
+        i += 1;
+
+        if i > signature.len() {
+            panic!("Unable to find a unique name for the build");
+        }
+    }
 }
 
 pub fn fetch(state: State, matches: &ArgMatches) {
@@ -192,23 +237,59 @@ pub fn fetch(state: State, matches: &ArgMatches) {
     );
     let commit = capture("git", &["rev-parse", "--short", "-q", "HEAD"], &repo_path);
 
-    match (branch, commit) {
+    match (&branch, &commit) {
         (Some(branch), Some(commit)) => println!("From git branch {} on commit {}", branch, commit),
         _ => (),
     }
 
-    let (tmp_name, tmp_path) = temp_dir(&state);
+    let tmp_path = temp_dir(&state);
+
+    let tmp_path2 = tmp_path.clone();
+    let _drop_tmp_dir = OnDrop(move || {
+        remove_recursively(&tmp_path2);
+    });
 
     println!("tmp_path {}", tmp_path.display());
 
     copy_recursively(&state, &stage1, &tmp_path.join("stage1"));
 
-    let signature = get_build_signature(&tmp_path);
+    let (signature, build_size) = get_build_signature(&tmp_path);
 
-    println!(
-        "Build signature is: {:?}",
-        HEXLOWER.encode(signature.as_ref())
+    println!("Build signature is: {:?}", signature);
+
+    let (name, build_path) = find_build_name(
+        &state,
+        &format!("{}-{}", repo, branch.as_deref().unwrap_or("")),
+        &signature,
     );
+
+    t!(fs::rename(&tmp_path, &build_path));
+
+    {
+        let mut file = t!(File::create(build_path.join("signature")));
+        t!(file.write_all(signature.as_bytes()));
+    }
+
+    {
+        let mut file = t!(File::create(build_path.join("info.txt")));
+        let info = format!(
+            "Git branch: {}\nGit commit: {}\nBuild size: {} ({} bytes)\n",
+            branch.unwrap_or_default(),
+            commit.unwrap_or_default(),
+            kib::format(build_size),
+            build_size,
+        );
+        t!(file.write_all(info.as_bytes()));
+    }
+
+    copy(
+        &state,
+        &repo_path.join("config.toml"),
+        &build_path.join("config.toml"),
+    );
+
+    println!("Build name is: {:?}", name,);
+    println!("Build size: {:?}", kib::format(build_size));
 
     if !rustc.exists() {
         panic!("Could not find build executable at `{}`", rustc.display());
