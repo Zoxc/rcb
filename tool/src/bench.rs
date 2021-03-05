@@ -3,7 +3,7 @@ use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     io::Write,
@@ -48,6 +48,24 @@ pub fn remove_fingerprint(path: &Path, krate: &str) {
         }
     }
     panic!("Didn't find fingerprint for {}", krate);
+}
+
+#[derive(Serialize)]
+struct ResultConfig {
+    build: String,
+    time: Vec<f64>,
+    times: Vec<Vec<(String, f64)>>,
+}
+
+#[derive(Serialize)]
+struct ResultBench {
+    name: String,
+    builds: Vec<ResultConfig>,
+}
+
+#[derive(Serialize)]
+struct Result {
+    benchs: Vec<ResultBench>,
 }
 
 struct Config {
@@ -174,7 +192,7 @@ impl Config {
         self.times.push(times);
     }
 
-    fn summary_time(&mut self) -> f64 {
+    fn summary_time(&self) -> f64 {
         self.time.iter().map(|t| *t).sum::<f64>() / self.time.len() as f64
     }
 
@@ -184,6 +202,14 @@ impl Config {
             self.display(),
             self.summary_time()
         );
+    }
+
+    fn result(&self) -> ResultConfig {
+        ResultConfig {
+            build: self.build.clone(),
+            time: self.time.clone(),
+            times: self.times.clone(),
+        }
     }
 }
 
@@ -239,7 +265,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let session_dir2 = session_dir.clone();
     let state2 = state.clone();
     let _drop_session_dir = OnDrop(move || {
-        //crate::remove_recursively(&session_dir2);
+        crate::remove_recursively(&session_dir2);
         fs::remove_dir(state2.root.join("tmp")).ok();
     });
 
@@ -275,6 +301,34 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         }
     }
 
+    {
+        let mut table = ascii_table::AsciiTable::default();
+
+        let mut column = ascii_table::Column::default();
+        column.header = "Benchmark".into();
+        table.columns.insert(0, column);
+
+        for (i, build) in configs.first().unwrap().iter().enumerate() {
+            let mut column = ascii_table::Column::default();
+            column.header = build.build.clone();
+            table.columns.insert(1 + i, column);
+        }
+
+        let rows: Vec<_> = configs
+            .iter()
+            .map(|builds| {
+                let mut row: Vec<String> = builds
+                    .iter()
+                    .map(|build| format!("{:.06}", build.summary_time()))
+                    .collect();
+                row.insert(0, builds.first().unwrap().bench.name.clone());
+                row
+            })
+            .collect();
+
+        table.print(rows);
+    }
+
     let build_names = builds
         .iter()
         .map(|build| build.name.as_str())
@@ -292,32 +346,47 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
 
     let mut file = t!(File::create(&path));
 
-    let mut report = String::new();
+    let result = Result {
+        benchs: configs
+            .iter()
+            .map(|builds| ResultBench {
+                name: builds.first().unwrap().bench.name.clone(),
+                builds: builds.iter().map(|build| build.result()).collect(),
+            })
+            .collect(),
+    };
 
-    report.push_str("<table>");
-    report.push_str("<tr>");
-    report.push_str("<td>Benchmark</td>");
-    for build in configs.first().unwrap() {
-        report.push_str("<td>");
-        report.push_str(&build.build);
-        report.push_str("</td>");
-    }
-    report.push_str("</tr>");
+    let title = builds
+        .iter()
+        .map(|build| build.name.as_str())
+        .collect::<Vec<_>>()
+        .join(" vs. ");
 
-    for builds in &mut configs {
-        report.push_str("<tr>");
-        report.push_str("<td>");
-        report.push_str(&builds.first().unwrap().bench.name);
-        report.push_str("</td>");
-        for build in builds {
-            report.push_str("<td>");
-            report.push_str(&format!("{:.06}", build.summary_time()));
-            report.push_str("</td>");
-        }
-        report.push_str("</tr>");
-    }
+    let result = serde_json::to_string(&result).unwrap();
 
-    report.push_str("</table>");
+    let mut report = r#"<!doctype html>
+    <html>
+    <head>
+      <title>Benchmark result for "#
+        .to_string();
+
+    report.push_str(&title);
+
+    report.push_str(
+        r#"</title>
+      <link rel="stylesheet" href="../misc/report_style.css">
+    <script>const DATA = "#,
+    );
+
+    report.push_str(&result);
+    report.push_str(
+        r#";</script>
+    <script defer src="../misc/report_script.js"></script>
+    </head>
+    <body>
+    </body>
+    </html>"#,
+    );
 
     t!(file.write_all(report.as_bytes()));
 

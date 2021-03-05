@@ -1,0 +1,40 @@
+body {
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    background-color: #eeeeee;
+    color: #333333;
+}
+
+html {
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+table {
+    margin: auto;
+}
+
+td,
+th {
+    padding: 0.5em;
+    background: #ebebeb;
+}
+
+h1 {
+    font-size: 1.4em;
+    padding: 2em;
+    margin: 0;
+}
+
+body > div {
+    text-align: center;
+    background: #f5f5f5;
+    margin: auto;
+    width: 50%;
+    height: 100%;
+    display: block;
+}
