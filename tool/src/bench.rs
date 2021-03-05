@@ -44,7 +44,6 @@ pub fn remove_fingerprint(path: &Path, krate: &str) {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         if let Some(i) = name.as_bytes().iter().rposition(|c| *c == '-' as u8) {
             if &name[0..i] == krate {
-                dbg!("rem", path.display());
                 crate::remove_recursively(&path);
                 return;
             }
@@ -171,7 +170,6 @@ impl Config {
         let duration = start.elapsed();
 
         if !output.status.success() {
-            //println!(output.stdout.)
             panic!(
                 "Unable to run - build:{} bench:{}",
                 self.build, self.bench.name
@@ -179,8 +177,6 @@ impl Config {
         }
 
         let stderr = t!(std::str::from_utf8(&output.stderr));
-
-        println!("stderr={}", stderr);
 
         let mut times: Vec<TimeData> = stderr
             .trim()
@@ -286,8 +282,6 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             }
         })
         .collect();
-
-    benchs.pop();
 
     t!(fs::create_dir_all(state.root.join("tmp")));
     let session_dir = crate::temp_dir(&state.root.join("tmp"));
