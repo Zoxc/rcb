@@ -16,11 +16,23 @@ html {
 
 table {
     margin: auto;
+    background: #dadada;
+    box-shadow: 0.1em 0.1em 1.7em rgba(0, 0, 0, 0.08);
+    border-radius: 5px;
+    border: 1px solid rgb(218, 218, 218);
+    padding: 2px;
 }
 
 td,
 th {
     padding: 0.5em;
+}
+
+td {
+    background: #f1f1f1;
+}
+
+th {
     background: #ebebeb;
 }
 
@@ -37,4 +49,20 @@ body > div {
     width: 50%;
     height: 100%;
     display: block;
+}
+
+.positive {
+    color: rgb(216, 78, 78);
+}
+
+.slightly-positive {
+    color: #835959;
+}
+
+.negative {
+    color: rgb(80, 182, 80);
+}
+
+.slightly-negative {
+    color: #637e63;
 }

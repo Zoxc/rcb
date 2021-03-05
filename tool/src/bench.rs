@@ -50,11 +50,19 @@ pub fn remove_fingerprint(path: &Path, krate: &str) {
     panic!("Didn't find fingerprint for {}", krate);
 }
 
+#[derive(Serialize, Clone)]
+struct TimeData {
+    name: String,
+    time: f64,
+    before_rss: String,
+    after_rss: String,
+}
+
 #[derive(Serialize)]
 struct ResultConfig {
     build: String,
     time: Vec<f64>,
-    times: Vec<Vec<(String, f64)>>,
+    times: Vec<Vec<TimeData>>,
 }
 
 #[derive(Serialize)]
@@ -74,7 +82,7 @@ struct Config {
     build: String,
     bench: Arc<Bench>,
     time: Vec<f64>,
-    times: Vec<Vec<(String, f64)>>,
+    times: Vec<Vec<TimeData>>,
 }
 
 impl Config {
@@ -169,17 +177,19 @@ impl Config {
 
         let stderr = t!(std::str::from_utf8(&output.stderr));
 
-        let times: Vec<(String, f64)> = stderr
+        let times: Vec<TimeData> = stderr
             .trim()
             .lines()
             .filter_map(|line| {
                 let line = line.trim();
                 if line.starts_with("time:") {
                     let parts: Vec<&str> = line.split_ascii_whitespace().collect();
-                    Some((
-                        parts.last().unwrap().to_string(),
-                        str::parse(parts[1].trim_right_matches(";")).unwrap(),
-                    ))
+                    Some(TimeData {
+                        name: parts.last().unwrap().to_string(),
+                        before_rss: parts[3].to_string(),
+                        after_rss: parts[5].to_string(),
+                        time: str::parse(parts[1].trim_end_matches(";")).unwrap(),
+                    })
                 } else {
                     None
                 }
@@ -194,14 +204,6 @@ impl Config {
 
     fn summary_time(&self) -> f64 {
         self.time.iter().map(|t| *t).sum::<f64>() / self.time.len() as f64
-    }
-
-    fn summary(&mut self) {
-        println!(
-            "Average for {} = {:.06}s",
-            self.display(),
-            self.summary_time()
-        );
     }
 
     fn result(&self) -> ResultConfig {
