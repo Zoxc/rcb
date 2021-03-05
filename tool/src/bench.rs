@@ -5,7 +5,8 @@ use clap::ArgMatches;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde_derive::Deserialize;
 use std::{
-    fs,
+    fs::{self, File},
+    io::Write,
     path::Path,
     path::PathBuf,
     process::{Command, Stdio},
@@ -55,6 +56,7 @@ struct Config {
     build: String,
     bench: Arc<Bench>,
     time: Vec<f64>,
+    times: Vec<Vec<(String, f64)>>,
 }
 
 impl Config {
@@ -149,18 +151,38 @@ impl Config {
 
         let stderr = t!(std::str::from_utf8(&output.stderr));
 
-        println!("stderr = {}", stderr);
+        let times: Vec<(String, f64)> = stderr
+            .trim()
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                if line.starts_with("time:") {
+                    let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+                    Some((
+                        parts.last().unwrap().to_string(),
+                        str::parse(parts[1].trim_right_matches(";")).unwrap(),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         println!("Ran {} in {:?}", self.display(), duration);
 
         self.time.push(duration.as_secs_f64());
+        self.times.push(times);
+    }
+
+    fn summary_time(&mut self) -> f64 {
+        self.time.iter().map(|t| *t).sum::<f64>() / self.time.len() as f64
     }
 
     fn summary(&mut self) {
         println!(
             "Average for {} = {:.06}s",
             self.display(),
-            self.time.iter().map(|t| *t).sum::<f64>() / self.time.len() as f64
+            self.summary_time()
         );
     }
 }
@@ -228,6 +250,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
                 .iter()
                 .map(|build| Config {
                     time: Vec::new(),
+                    times: Vec::new(),
                     session_dir: session_dir.clone(),
                     state: state.clone(),
                     build: build.name.clone(),
@@ -244,14 +267,59 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     });
 
     for builds in &mut configs {
-        for _ in 0..3 {
+        for _ in 0..1 {
             for build in &mut *builds {
                 println!("Benching {}", build.display());
                 build.run();
             }
         }
-        for build in builds {
-            build.summary();
-        }
     }
+
+    let build_names = builds
+        .iter()
+        .map(|build| build.name.as_str())
+        .collect::<Vec<_>>()
+        .join("__vs._");
+
+    let time = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+
+    let path = state
+        .root
+        .join("reports")
+        .join(format!("{}_{}.html", build_names, time));
+
+    t!(fs::create_dir_all(path.parent().unwrap()));
+
+    let mut file = t!(File::create(&path));
+
+    let mut report = String::new();
+
+    report.push_str("<table>");
+    report.push_str("<tr>");
+    report.push_str("<td>Benchmark</td>");
+    for build in configs.first().unwrap() {
+        report.push_str("<td>");
+        report.push_str(&build.build);
+        report.push_str("</td>");
+    }
+    report.push_str("</tr>");
+
+    for builds in &mut configs {
+        report.push_str("<tr>");
+        report.push_str("<td>");
+        report.push_str(&builds.first().unwrap().bench.name);
+        report.push_str("</td>");
+        for build in builds {
+            report.push_str("<td>");
+            report.push_str(&format!("{:.06}", build.summary_time()));
+            report.push_str("</td>");
+        }
+        report.push_str("</tr>");
+    }
+
+    report.push_str("</table>");
+
+    t!(file.write_all(report.as_bytes()));
+
+    println!("Extended report at {}", path.display());
 }
