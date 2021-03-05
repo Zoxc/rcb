@@ -2,9 +2,11 @@ use crate::Build;
 use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
+use core::panic;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde_derive::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     fs::{self, File},
     io::Write,
     path::Path,
@@ -42,6 +44,7 @@ pub fn remove_fingerprint(path: &Path, krate: &str) {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         if let Some(i) = name.as_bytes().iter().rposition(|c| *c == '-' as u8) {
             if &name[0..i] == krate {
+                dbg!("rem", path.display());
                 crate::remove_recursively(&path);
                 return;
             }
@@ -177,15 +180,18 @@ impl Config {
 
         let stderr = t!(std::str::from_utf8(&output.stderr));
 
-        let times: Vec<TimeData> = stderr
+        println!("stderr={}", stderr);
+
+        let mut times: Vec<TimeData> = stderr
             .trim()
             .lines()
             .filter_map(|line| {
                 let line = line.trim();
                 if line.starts_with("time:") {
                     let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+                    let name = parts.last().unwrap().to_string();
                     Some(TimeData {
-                        name: parts.last().unwrap().to_string(),
+                        name,
                         before_rss: parts[3].to_string(),
                         after_rss: parts[5].to_string(),
                         time: str::parse(parts[1].trim_end_matches(";")).unwrap(),
@@ -195,6 +201,28 @@ impl Config {
                 }
             })
             .collect();
+
+        let totals: Vec<_> = times
+            .iter()
+            .enumerate()
+            .filter(|(_, time)| time.name == "total")
+            .collect();
+
+        if totals.len() > 1 {
+            times = times.split_off(totals[totals.len() - 2].0 + 1);
+        }
+
+        let mut seen = HashSet::new();
+
+        for time in &times {
+            if !seen.insert(time.name.clone()) {
+                panic!(
+                    "Duplicate -Z time entry for `{}` in {}",
+                    time.name,
+                    self.display()
+                );
+            }
+        }
 
         println!("Ran {} in {:?}", self.display(), duration);
 

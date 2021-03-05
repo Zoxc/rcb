@@ -49,14 +49,8 @@ function average_by(array, f = (a) => a) {
 }
 
 function max_rss(time) {
-    console.log("max_rss", time);
-
-    //return 10;
-
     return time.reduce((accumulator, current) => {
-        console.log("reduce2", current);
         let rss = Math.max(parseInt(current.after_rss), parseInt(current.before_rss));
-        console.log("reduce", rss);
         return Math.max(accumulator, rss);
     }, 0);
 }
@@ -95,4 +89,47 @@ for (const bench of DATA.benchs) {
 
 summary += "</table>";
 
-document.body.innerHTML = `<div><h1>${document.title}</h1>${summary}</div>`
+let benchs = "";
+
+
+for (const bench of DATA.benchs) {
+    benchs += `<h3>Details of <b>${bench.name}</b></h3><table><tr><th>Stage</th></tr>`
+
+
+    let data = bench.builds.map(build => {
+        console.log(build.build, "build", build);
+        let entries = {};
+
+        for (const instance of build.times) {
+            console.log(build.build, "instance", instance);
+
+            for (const data of instance) {
+                console.log(build.build, "instance entry", data);
+                if (entries[data.name] === undefined) {
+                    entries[data.name] = [];
+                }
+                entries[data.name].push(data);
+            }
+
+        }
+
+        console.log(build.build, "entries", entries);
+    });
+
+
+    let times = bench.builds[0].times[0].map(entry => entry.name).filter(entry => {
+        return bench.builds.every(build => {
+            return build.times[0].find(build_entry => build_entry == entry) != undefined;
+        });
+    });
+
+    for (let i = 0; i < times.length; i++) {
+        const config = times[i];
+        benchs += `<tr><td>${config}</td></tr>`
+    }
+
+    benchs += `</table>`;
+}
+
+
+document.body.innerHTML = `<div><h1>${document.title}</h1>${summary}${benchs}</div>`;
