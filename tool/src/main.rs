@@ -74,6 +74,7 @@ struct Repo {
 
 #[derive(Deserialize, Debug)]
 struct Config {
+    iterations: Option<usize>,
     root: Option<PathBuf>,
     repo: HashMap<String, Repo>,
 }
@@ -155,8 +156,9 @@ fn main() {
     let fetch = SubCommand::with_name("fetch")
         .arg(Arg::with_name("ref").long("ref"))
         .arg(Arg::with_name("REPO"));
-    let bench =
-        SubCommand::with_name("bench").arg(Arg::with_name("BUILD").multiple(true).required(true));
+    let bench = SubCommand::with_name("bench")
+        .arg(Arg::with_name("BUILD").multiple(true).required(true))
+        .arg(Arg::with_name("iterations").short("i").takes_value(true));
     let matches = App::new("rcb")
         .about("Rust Compiler Bencher")
         .setting(AppSettings::SubcommandRequiredElseHelp)

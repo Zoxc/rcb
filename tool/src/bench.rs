@@ -1,6 +1,7 @@
 use crate::Build;
 use crate::OnDrop;
 use crate::State;
+use clap::value_t;
 use clap::ArgMatches;
 use core::panic;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -127,17 +128,22 @@ impl Config {
         let output = t!(output.output());
 
         if !output.status.success() {
-            //println!(output.stdout.)
-            panic!(
-                "Unable to prepare config - build:{} bench:{}",
-                self.build, self.bench.name
+            let stderr = t!(std::str::from_utf8(&output.stderr));
+            let stdout = t!(std::str::from_utf8(&output.stdout));
+
+            println!(
+                "Unable to prepare {}\n\nSTDERR:\n{}\n\nSTDOUT:\n{}\n",
+                self.display(),
+                stderr,
+                stdout
             );
+            panic!("Unable to prepare config");
         }
 
         println!("Prepared {}", self.display());
     }
 
-    fn run(&mut self) {
+    fn run(&mut self, warmup: bool) {
         let fingerprint_dir = self
             .path()
             .join("target")
@@ -176,54 +182,57 @@ impl Config {
             );
         }
 
-        let stderr = t!(std::str::from_utf8(&output.stderr));
+        if !warmup {
+            let stderr = t!(std::str::from_utf8(&output.stderr));
 
-        let mut times: Vec<TimeData> = stderr
-            .trim()
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                if line.starts_with("time:") {
-                    let parts: Vec<&str> = line.split_ascii_whitespace().collect();
-                    let name = parts.last().unwrap().to_string();
-                    Some(TimeData {
-                        name,
-                        before_rss: parts[3].to_string(),
-                        after_rss: parts[5].to_string(),
-                        time: str::parse(parts[1].trim_end_matches(";")).unwrap(),
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
+            let mut times: Vec<TimeData> = stderr
+                .trim()
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim();
+                    if line.starts_with("time:") {
+                        let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+                        let name = parts.last().unwrap().to_string();
+                        Some(TimeData {
+                            name,
+                            before_rss: parts[3].to_string(),
+                            after_rss: parts[5].to_string(),
+                            time: str::parse(parts[1].trim_end_matches(";")).unwrap(),
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
-        let totals: Vec<_> = times
-            .iter()
-            .enumerate()
-            .filter(|(_, time)| time.name == "total")
-            .collect();
+            let totals: Vec<_> = times
+                .iter()
+                .enumerate()
+                .filter(|(_, time)| time.name == "total")
+                .collect();
 
-        if totals.len() > 1 {
-            times = times.split_off(totals[totals.len() - 2].0 + 1);
-        }
-
-        let mut seen = HashSet::new();
-
-        for time in &times {
-            if !seen.insert(time.name.clone()) {
-                panic!(
-                    "Duplicate -Z time entry for `{}` in {}",
-                    time.name,
-                    self.display()
-                );
+            if totals.len() > 1 {
+                let split_at = totals[totals.len() - 2].0 + 1;
+                times = times.split_off(split_at);
             }
+
+            let mut seen = HashSet::new();
+
+            for time in &times {
+                if !seen.insert(time.name.clone()) {
+                    panic!(
+                        "Duplicate -Z time entry for `{}` in {}",
+                        time.name,
+                        self.display()
+                    );
+                }
+            }
+
+            println!("Ran {} in {:?}", self.display(), duration);
+
+            self.time.push(duration.as_secs_f64());
+            self.times.push(times);
         }
-
-        println!("Ran {} in {:?}", self.display(), duration);
-
-        self.time.push(duration.as_secs_f64());
-        self.times.push(times);
     }
 
     fn summary_time(&self) -> f64 {
@@ -240,6 +249,11 @@ impl Config {
 }
 
 pub fn bench(state: Arc<State>, matches: &ArgMatches) {
+    let iterations =
+        value_t!(matches, "iterations", usize).unwrap_or(state.config.iterations.unwrap_or(8));
+    let iterations = std::cmp::max(1, iterations);
+    println!("Using {} iterations", iterations);
+
     let builds: Vec<Build> = matches
         .values_of("BUILD")
         .unwrap()
@@ -317,10 +331,14 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     });
 
     for builds in &mut configs {
-        for _ in 0..1 {
+        for build in &mut *builds {
+            println!("Warming up {}", build.display());
+            build.run(true);
+        }
+        for _ in 0..iterations {
             for build in &mut *builds {
                 println!("Benching {}", build.display());
-                build.run();
+                build.run(false);
             }
         }
     }

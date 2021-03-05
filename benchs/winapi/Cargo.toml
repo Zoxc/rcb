@@ -17,11 +17,6 @@ features = ["everything", "impl-debug", "impl-default"]
 default-target = "x86_64-pc-windows-msvc"
 targets = ["aarch64-pc-windows-msvc", "i686-pc-windows-msvc", "x86_64-pc-windows-msvc"]
 
-[target.i686-pc-windows-gnu.dependencies]
-winapi-i686-pc-windows-gnu = { version = "0.4", path = "i686" }
-[target.x86_64-pc-windows-gnu.dependencies]
-winapi-x86_64-pc-windows-gnu = { version = "0.4", path = "x86_64" }
-
 [features]
 default = ["dxgi1_6", "hidusage", "usbiodef", "lmremutl", "wincodecsdk", "wbemprov", "dwrite_2", "consoleapi", "enclaveapi", "d3d9", "ifmib", "ntddndis", "tlhelp32", "lmserver", "d3d10shader", "wincrypt", "shellapi"]
 debug = ["impl-debug"]

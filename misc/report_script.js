@@ -175,7 +175,7 @@ for (const bench of DATA.benchs) {
 
     for (let i = 0; i < times.length; i++) {
         const config = times[i];
-        benchs += `<tr><th>${config}</th>`;
+        benchs += `<tr><th class="event">${config}</th>`;
 
         let first = data[0][config].time;
 

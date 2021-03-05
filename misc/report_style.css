@@ -51,6 +51,13 @@ th {
     text-align: left;
 }
 
+th.r,
+th.event {
+    color: rgb(73, 73, 73);
+    background: #e0e0e0;
+    font-weight: normal;
+}
+
 h1,
 h3 {
     font-weight: normal;
