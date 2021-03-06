@@ -4,7 +4,7 @@ use crate::State;
 use clap::value_t;
 use clap::ArgMatches;
 use core::panic;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -29,16 +29,29 @@ struct Bench {
 
 #[derive(Clone)]
 struct Config {
-    incremental: bool,
+    incremental: IncrementalMode,
     mode: BenchMode,
     bench: Arc<Bench>,
 }
 
 impl Config {
     fn display(&self) -> String {
-        format!("{}:{}", self.bench.name, self.mode.display())
+        let start = format!("{}:{}", self.bench.name, self.mode.display());
+        match self.incremental {
+            IncrementalMode::Full => format!("{}:initial", start),
+            IncrementalMode::Unchanged => format!("{}:unchanged", start),
+            IncrementalMode::None => start,
+        }
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IncrementalMode {
+    None,
+    Full,
+    Unchanged,
+}
+
 #[derive(Clone, Copy)]
 enum BenchMode {
     Check,
@@ -146,7 +159,11 @@ impl Instance {
             .env("RUSTFLAGS", "-Ztime")
             .env(
                 "CARGO_INCREMENTAL",
-                if self.config.incremental { "1" } else { "0" },
+                if self.config.incremental != IncrementalMode::None {
+                    "1"
+                } else {
+                    "0"
+                },
             )
             .env("CARGO_TARGET_DIR", self.path().join("target"));
 
@@ -166,7 +183,7 @@ impl Instance {
         output
     }
 
-    fn prepare(&self) {
+    fn prepare(&mut self) {
         println!("Preparing {}", self.display());
 
         t!(fs::create_dir_all(self.path()));
@@ -189,20 +206,29 @@ impl Instance {
             panic!("Unable to prepare instance");
         }
 
+        // Run an extra time to remove cached queries that can't follow from one unchanged
+        // session to the next
+        if self.config.incremental == IncrementalMode::Unchanged {
+            self.run(true);
+        }
+
         println!("Prepared {}", self.display());
     }
 
     fn remove_fingerprint(&self) {
-        let fingerprint_dir = self
-            .path()
-            .join("target")
-            .join(match self.config.mode {
-                BenchMode::Check | BenchMode::Debug => "debug",
-                BenchMode::Release => "release",
-            })
-            .join(".fingerprint");
+        let target_profile = self.path().join("target").join(match self.config.mode {
+            BenchMode::Check | BenchMode::Debug => "debug",
+            BenchMode::Release => "release",
+        });
 
-        remove_fingerprint(&fingerprint_dir, &self.config.bench.name);
+        remove_fingerprint(
+            &target_profile.join(".fingerprint"),
+            &self.config.bench.name,
+        );
+
+        if self.config.incremental == IncrementalMode::Full {
+            remove_fingerprint(&target_profile.join("incremental"), &self.config.bench.name);
+        }
     }
 
     fn run(&mut self, warmup: bool) {
@@ -381,14 +407,40 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         modes = vec![BenchMode::Check, BenchMode::Release, BenchMode::Debug];
     }
 
+    let mut incr_modes = Vec::new();
+
+    if matches.is_present("incr-none") {
+        incr_modes.push(IncrementalMode::None);
+    }
+
+    if matches.is_present("incr-full") {
+        incr_modes.push(IncrementalMode::Full);
+    }
+
+    if matches.is_present("incr-unchanged") {
+        incr_modes.push(IncrementalMode::Unchanged);
+    }
+
+    if incr_modes.is_empty() {
+        incr_modes = vec![
+            IncrementalMode::None,
+            IncrementalMode::Full,
+            IncrementalMode::Unchanged,
+        ];
+    }
+
+    let incr_modes = &incr_modes;
     let bench_configs: Vec<Config> = benchs
         .iter()
         .cloned()
         .flat_map(|bench| {
-            modes.iter().map(move |&mode| Config {
-                incremental: false,
-                mode,
-                bench: bench.clone(),
+            modes.iter().flat_map(move |&mode| {
+                let bench = bench.clone();
+                incr_modes.iter().map(move |&incremental| Config {
+                    incremental,
+                    mode,
+                    bench: bench.clone(),
+                })
             })
         })
         .collect();
@@ -429,8 +481,8 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         })
         .collect();
 
-    configs.par_iter().for_each(|config| {
-        config.builds.par_iter().for_each(|instance| {
+    configs.par_iter_mut().for_each(|config| {
+        config.builds.par_iter_mut().for_each(|instance| {
             instance.prepare();
         });
     });
@@ -480,7 +532,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
                         format!("{:.06} {}", build.summary_time(), change)
                     })
                     .collect();
-                row.insert(0, config.config.bench.name.clone());
+                row.insert(0, config.config.display());
                 row
             })
             .collect();

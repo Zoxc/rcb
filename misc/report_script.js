@@ -15,6 +15,15 @@ function format_bench(name) {
         }
     }
 
+    if (parts.length > 2) {
+        if (parts[2] == 'initial') {
+            parts[2] = `<span class="bench-incr">initial</span>`
+        }
+        if (parts[2] == 'unchanged') {
+            parts[2] = `<span class="bench-incr">unchanged</span>`
+        }
+    }
+
     return `<span class="bench-name">${parts.join(`<span class="bench-colon">:</span>`)}</span>`;
 }
 

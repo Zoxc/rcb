@@ -74,6 +74,15 @@ a:hover .bench-release {
     color: rgb(66, 124, 179);
 }
 
+.bench-incr {
+    font-weight: normal;
+    color: rgb(119, 138, 113);
+}
+
+a:hover .bench-incr {
+    color: rgb(135, 161, 126);
+}
+
 .extra-opts {
     padding: 1em;
     margin: 0em;

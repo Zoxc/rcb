@@ -175,6 +175,9 @@ fn main() {
                 .takes_value(true),
         )
         .arg(Arg::with_name("iterations").short("n").takes_value(true))
+        .arg(Arg::with_name("incr-none").long("--incr-none"))
+        .arg(Arg::with_name("incr-full").long("--incr-full"))
+        .arg(Arg::with_name("incr-unchanged").long("--incr-unchanged"))
         .arg(Arg::with_name("check").long("--check"))
         .arg(Arg::with_name("release").long("--release"))
         .arg(Arg::with_name("debug").long("--debug"));
