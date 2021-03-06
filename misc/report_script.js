@@ -1,4 +1,4 @@
-console.log(DATA);
+console.log("Report JSON", DATA);
 
 function format_time(secs) {
     return `${secs.toFixed(4)}s`;
@@ -68,39 +68,7 @@ function max_rss(time) {
     }, 0);
 }
 
-let benchs = "";
-
-for (const bench of DATA.benchs) {
-    benchs += `<h3 id="${bench.name}">Details of <b>${bench.name}</b></h3><table><tr><th rowspan="2">Stage</th>`
-
-    for (let i = 0; i < bench.builds.length; i++) {
-        const config = bench.builds[i];
-        benchs += `<th colspan="${i > 0 ? 2 : 1}">${config.build}</th>`
-    }
-
-    for (let i = 0; i < bench.builds.length; i++) {
-        const config = bench.builds[i];
-        benchs += `<th colspan="${i > 0 ? 2 : 1}">${config.build}</th>`
-    }
-
-    benchs += "</tr><tr>";
-
-    for (let i = 0; i < bench.builds.length; i++) {
-        benchs += `<th class="r">Time</th>`;
-        if (i > 0) {
-            benchs += `<th class="r">%</th>`;
-        }
-    }
-
-    for (let i = 0; i < bench.builds.length; i++) {
-        benchs += `<th class="r">Memory</th>`;
-        if (i > 0) {
-            benchs += `<th class="r">%</th>`;
-        }
-    }
-
-    benchs += "</tr>";
-
+function bench_detail(bench) {
     let data = bench.builds.map(build => {
         let entries = {};
 
@@ -118,7 +86,7 @@ for (const bench of DATA.benchs) {
         for (const entry in entries) {
             entries_avg[entry] = {
                 time: average_by(entries[entry], entry => entry.time),
-                rss: average_by(entries[entry], entry => parseFloat(entry.after_rss)),
+                rss: average_by(entries[entry], entry => parseFloat(entry.after_rss) * 1024 * 1024),
             };
         }
 
@@ -131,32 +99,20 @@ for (const bench of DATA.benchs) {
         });
     });
 
-    for (let i = 0; i < times.length; i++) {
-        const config = times[i];
-        benchs += `<tr><th class="event">${config}</th>`;
+    console.log(data);
 
-        let first = data[0][config].time;
+    let table = {
+        type: 'Stage',
+        columns: [{ name: 'Time', format: format_time }, { name: 'Memory', format: format_size }],
+        rows: times.map(event => {
+            return {
+                name: event,
+                columns: [data.map(build => build[event].time), data.map(build => build[event].rss)]
+            };
+        })
+    };
 
-        for (let j = 0; j < data.length; j++) {
-            const build = data[j];
-            let average = build[config].time;
-            benchs += `<td>${average.toFixed(4)}s</td>`;
-            benchs += change(average, first, j > 0);
-        }
-
-        let first_rss = data[0][config].rss;
-
-        for (let j = 0; j < data.length; j++) {
-            const build = data[j];
-            let average = build[config].rss;
-            benchs += `<td>${average.toFixed(2)} MiB</td>`;
-            benchs += change(average, first_rss, j > 0);
-        }
-
-        benchs += `</tr>`
-    }
-
-    benchs += `</table>`;
+    return `<div><h3 id="${bench.name}">Details of <b>${bench.name}</b></h3>${diff_table(table)}</div>`;
 }
 
 function escapeHTML(str) {
@@ -293,66 +249,76 @@ function summary() {
         })
     };
 
-    return `<h3>Build comparison</h3>${diff_table(summary)}`;
+    return `<div><h3>Benchmark summary</h3>${diff_table(summary)}</div>`;
 }
 
-let dbg_filter = file => !file.path.endsWith(".pdb");
+const build_sizes = (() => {
+    let dbg_filter = file => !file.path.endsWith(".pdb");
 
-let std_sizes = DATA.builds.map(build => {
-    return build.files.filter(dbg_filter)
-        .filter(file => file.path.replaceAll("\\", "/").startsWith(`lib/rustlib/${build.triple}/lib/`))
-        .reduce((a, b) => a + b.size, 0);
-});
+    let std_sizes = DATA.builds.map(build => {
+        return build.files.filter(dbg_filter)
+            .filter(file => file.path.replaceAll("\\", "/").startsWith(`lib/rustlib/${build.triple}/lib/`))
+            .reduce((a, b) => a + b.size, 0);
+    });
+
+    let compiler_sizes = DATA.builds.map(build => {
+        return build.files.filter(dbg_filter)
+            .filter(file => file.path.replaceAll("\\", "/").startsWith("bin/"))
+            .reduce((a, b) => a + b.size, 0);
+    });
+
+    let total_sizes = DATA.builds.map(build => {
+        return build.files.filter(dbg_filter).reduce((a, b) => a + b.size, 0);
+    });
+
+    let total_with_dbg_sizes = DATA.builds.map(build => {
+        return build.files.reduce((a, b) => a + b.size, 0);
+    });
+
+    let size = {
+        type: '',
+        columns: [{ name: 'Size', format: format_size }],
+        rows: [
+            { name: 'Compiler size', columns: [compiler_sizes] },
+            { name: 'Std size', columns: [std_sizes] },
+            { name: 'Total size', columns: [total_sizes] },
+            { name: 'Total with debug info', columns: [total_with_dbg_sizes] }
+        ]
+    };
+
+    return `<div><h3>Build size comparison</h3>${diff_table(size)}</div>`;
+})();
+
+let file_map = {};
+
+for (const build of DATA.builds) {
+    for (const file of build.files) {
+        file_map[file.path] = true;
+    }
+}
+
+let files = Object.keys(file_map).sort();
 
 let compiler_sizes = DATA.builds.map(build => {
-    return build.files.filter(dbg_filter)
+    return build.files
         .filter(file => file.path.replaceAll("\\", "/").startsWith("bin/"))
         .reduce((a, b) => a + b.size, 0);
 });
 
-let total_sizes = DATA.builds.map(build => {
-    return build.files.filter(dbg_filter).reduce((a, b) => a + b.size, 0);
-});
-
-let total_with_dbg_sizes = DATA.builds.map(build => {
-    return build.files.reduce((a, b) => a + b.size, 0);
-});
-
-let size = {
-    type: 'Build size',
-    columns: [{ name: 'Size', format: format_size }],
-    rows: [
-        { name: 'Compiler size', columns: [compiler_sizes] },
-        { name: 'Std size', columns: [std_sizes] },
-        { name: 'Total size', columns: [total_sizes] },
-        { name: 'Total with debug info', columns: [total_with_dbg_sizes] }
-    ]
-};
-
-const build_sizes = `<h3>Build comparison</h3>${diff_table(size)}`;
-
-let files = {};
-
-for (const build of DATA.builds) {
-    for (const file of build.files) {
-        files[file[0]] = true;
-    }
-}
-
-console.log(Object.keys(files));
-
 let file_size = {
-    type: 'Build size',
+    type: 'File',
     columns: [{ name: 'Size', format: format_size }],
-    rows: [
-        { name: 'Compiler size', columns: [compiler_sizes] },
-        { name: 'Std size', columns: [std_sizes] },
-        { name: 'Total size', columns: [total_sizes] },
-        { name: 'Total with debug info', columns: [total_with_dbg_sizes] }
-    ]
+    rows: files.map(file => {
+        return {
+            name: file, columns: [DATA.builds.map(build => {
+                let f = build.files.find(f => f.path === file);
+                return f == undefined ? 0 : f.size;
+            })]
+        };
+    })
 };
 
-const file_sizes = `<h3>Build file size details</h3>${diff_table(file_size)}`;
+const file_sizes = `<div><h3>Build size details</h3>${diff_table(file_size)}</div>`;
 
 let title = `Benchmark result for `;
 
@@ -363,5 +329,18 @@ for (let i = 0; i < DATA.benchs[0].builds.length; i++) {
     title += `<b>${DATA.benchs[0].builds[i].build}</b>`;
 }
 
-
-document.body.innerHTML = `<div><h1>${title}</h1>${summary()}${build_details()}${build_sizes}${benchs}</div>`;
+let content = `<div>`;
+content += `<h1>${title}</h1><p>Results are the average of ${DATA.benchs[0].builds[0].time.length} execution(s).</p>`;
+content += `<div class="flex">`;
+content += summary();
+content += build_sizes;
+content += `</div>`;
+content += build_details();
+content += `<div class="flex">`;
+content += file_sizes;
+for (const bench of DATA.benchs) {
+    content += bench_detail(bench);
+}
+content += `</div>`;
+content += `</div>`;
+document.body.innerHTML = content;
