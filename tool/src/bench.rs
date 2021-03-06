@@ -27,15 +27,33 @@ struct Bench {
     cargo_dir: PathBuf,
 }
 
-struct BenchConfig {
+#[derive(Clone)]
+struct Config {
     incremental: bool,
     mode: BenchMode,
+    bench: Arc<Bench>,
 }
 
+impl Config {
+    fn display(&self) -> String {
+        format!("{}:{}", self.bench.name, self.mode.display())
+    }
+}
+#[derive(Clone, Copy)]
 enum BenchMode {
     Check,
     Debug,
     Release,
+}
+
+impl BenchMode {
+    fn display(&self) -> &'static str {
+        match self {
+            BenchMode::Check => "check",
+            BenchMode::Debug => "debug",
+            BenchMode::Release => "release",
+        }
+    }
 }
 
 pub fn remove_fingerprint(path: &Path, krate: &str) {
@@ -79,25 +97,34 @@ struct Result {
     benchs: Vec<ResultBench>,
 }
 
-struct Config {
+struct Instance {
     session_dir: PathBuf,
     state: Arc<State>,
     build: String,
-    bench: Arc<Bench>,
+    config: Config,
     time: Vec<f64>,
     times: Vec<Vec<TimeData>>,
 }
 
-impl Config {
+struct ConfigInstances {
+    config: Config,
+    builds: Vec<Instance>,
+}
+
+impl Instance {
     fn display(&self) -> String {
         format!(
-            "benchmark `{}` with build `{}`",
-            self.bench.name, self.build
+            "benchmark {} with build `{}`",
+            self.config.display(),
+            self.build
         )
     }
 
     fn path(&self) -> PathBuf {
-        self.session_dir.join(&self.build).join(&self.bench.name)
+        self.session_dir
+            .join(&self.build)
+            .join(&self.config.bench.name)
+            .join(self.config.mode.display())
     }
 
     fn prepare(&self) {
@@ -107,7 +134,7 @@ impl Config {
 
         let mut output = Command::new("cargo");
         output
-            .current_dir(&self.bench.cargo_dir)
+            .current_dir(&self.config.bench.cargo_dir)
             .stdin(Stdio::null())
             .env(
                 "RUSTC",
@@ -137,7 +164,7 @@ impl Config {
                 stderr,
                 stdout
             );
-            panic!("Unable to prepare config");
+            panic!("Unable to prepare instance");
         }
 
         println!("Prepared {}", self.display());
@@ -150,11 +177,11 @@ impl Config {
             .join("debug")
             .join(".fingerprint");
 
-        remove_fingerprint(&fingerprint_dir, &self.bench.name);
+        remove_fingerprint(&fingerprint_dir, &self.config.bench.name);
 
         let mut output = Command::new("cargo");
         output
-            .current_dir(&self.bench.cargo_dir)
+            .current_dir(&self.config.bench.cargo_dir)
             .stdin(Stdio::null())
             .env(
                 "RUSTC",
@@ -176,10 +203,16 @@ impl Config {
         let duration = start.elapsed();
 
         if !output.status.success() {
-            panic!(
-                "Unable to run - build:{} bench:{}",
-                self.build, self.bench.name
+            let stderr = t!(std::str::from_utf8(&output.stderr));
+            let stdout = t!(std::str::from_utf8(&output.stdout));
+
+            println!(
+                "Unable to run {}\n\nSTDERR:\n{}\n\nSTDOUT:\n{}\n",
+                self.display(),
+                stderr,
+                stdout
             );
+            panic!("Unable to run instance");
         }
 
         if !warmup {
@@ -285,7 +318,6 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             if t!(f.file_type()).is_dir() {
                 let info = t!(fs::read_to_string(path.join("bench.toml")));
                 let info: BenchToml = t!(toml::from_str(&info));
-                println!("Benchmark {}", path.display());
                 let name = name.to_string_lossy().into_owned();
                 Some(Arc::new(Bench {
                     name,
@@ -294,6 +326,36 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             } else {
                 None
             }
+        })
+        .collect();
+
+    let mut modes = Vec::new();
+
+    if matches.is_present("check") {
+        modes.push(BenchMode::Check);
+    }
+
+    if matches.is_present("release") {
+        modes.push(BenchMode::Release);
+    }
+
+    if matches.is_present("debug") {
+        modes.push(BenchMode::Debug);
+    }
+
+    if modes.is_empty() {
+        modes = vec![BenchMode::Check, BenchMode::Release, BenchMode::Debug];
+    }
+
+    let bench_configs: Vec<Config> = benchs
+        .iter()
+        .cloned()
+        .flat_map(|bench| {
+            modes.iter().map(move |&mode| Config {
+                incremental: false,
+                mode,
+                bench: bench.clone(),
+            })
         })
         .collect();
 
@@ -307,38 +369,47 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         fs::remove_dir(state2.root.join("tmp")).ok();
     });
 
-    let mut configs: Vec<Vec<Config>> = benchs
+    let bench_configs_desc = bench_configs
         .iter()
-        .map(|bench| {
-            builds
+        .map(|bench| bench.display())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    println!("Benchmarks: {}", bench_configs_desc);
+
+    let mut configs: Vec<ConfigInstances> = bench_configs
+        .iter()
+        .map(|config| ConfigInstances {
+            config: config.clone(),
+            builds: builds
                 .iter()
-                .map(|build| Config {
+                .map(|build| Instance {
                     time: Vec::new(),
                     times: Vec::new(),
                     session_dir: session_dir.clone(),
                     state: state.clone(),
                     build: build.name.clone(),
-                    bench: bench.clone(),
+                    config: config.clone(),
                 })
-                .collect()
+                .collect(),
         })
         .collect();
 
-    configs.par_iter().for_each(|builds| {
-        builds.par_iter().for_each(|config| {
-            config.prepare();
+    configs.par_iter().for_each(|config| {
+        config.builds.par_iter().for_each(|instance| {
+            instance.prepare();
         });
     });
 
-    for builds in &mut configs {
-        for build in &mut *builds {
-            println!("Warming up {}", build.display());
-            build.run(true);
+    for config in &mut configs {
+        for instance in &mut *config.builds {
+            println!("Warming up {}", instance.display());
+            instance.run(true);
         }
         for _ in 0..iterations {
-            for build in &mut *builds {
-                println!("Benching {}", build.display());
-                build.run(false);
+            for instance in &mut *config.builds {
+                println!("Benching {}", instance.display());
+                instance.run(false);
             }
         }
     }
@@ -350,20 +421,21 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         column.header = "Benchmark".into();
         table.columns.insert(0, column);
 
-        for (i, build) in configs.first().unwrap().iter().enumerate() {
+        for (i, build) in builds.iter().enumerate() {
             let mut column = ascii_table::Column::default();
-            column.header = build.build.clone();
+            column.header = build.name.clone();
             table.columns.insert(1 + i, column);
         }
 
         let rows: Vec<_> = configs
             .iter()
-            .map(|builds| {
-                let mut row: Vec<String> = builds
+            .map(|config| {
+                let mut row: Vec<String> = config
+                    .builds
                     .iter()
                     .map(|build| format!("{:.06}", build.summary_time()))
                     .collect();
-                row.insert(0, builds.first().unwrap().bench.name.clone());
+                row.insert(0, config.config.bench.name.clone());
                 row
             })
             .collect();
@@ -391,9 +463,13 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let result = Result {
         benchs: configs
             .iter()
-            .map(|builds| ResultBench {
-                name: builds.first().unwrap().bench.name.clone(),
-                builds: builds.iter().map(|build| build.result()).collect(),
+            .map(|config| ResultBench {
+                name: config.config.bench.name.clone(),
+                builds: config
+                    .builds
+                    .iter()
+                    .map(|instance| instance.result())
+                    .collect(),
             })
             .collect(),
     };

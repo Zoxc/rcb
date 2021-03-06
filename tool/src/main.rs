@@ -158,7 +158,10 @@ fn main() {
         .arg(Arg::with_name("REPO"));
     let bench = SubCommand::with_name("bench")
         .arg(Arg::with_name("BUILD").multiple(true).required(true))
-        .arg(Arg::with_name("iterations").short("i").takes_value(true));
+        .arg(Arg::with_name("iterations").short("n").takes_value(true))
+        .arg(Arg::with_name("check").long("--check"))
+        .arg(Arg::with_name("release").long("--release"))
+        .arg(Arg::with_name("debug").long("--debug"));
     let matches = App::new("rcb")
         .about("Rust Compiler Bencher")
         .setting(AppSettings::SubcommandRequiredElseHelp)

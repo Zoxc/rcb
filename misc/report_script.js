@@ -67,7 +67,7 @@ function average_by(array, f = (a) => a) {
 
 function max_rss(time) {
     return time.reduce((accumulator, current) => {
-        let rss = Math.max(parseInt(current.after_rss), parseInt(current.before_rss));
+        let rss = Math.max(parseFloat(current.after_rss), parseFloat(current.before_rss));
         return Math.max(accumulator, rss);
     }, 0);
 }
@@ -158,7 +158,7 @@ for (const bench of DATA.benchs) {
         for (const entry in entries) {
             entries_avg[entry] = {
                 time: average_by(entries[entry], entry => entry.time),
-                rss: average_by(entries[entry], entry => parseInt(entry.after_rss)),
+                rss: average_by(entries[entry], entry => parseFloat(entry.after_rss)),
             };
         }
 
