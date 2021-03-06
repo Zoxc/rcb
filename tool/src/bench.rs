@@ -128,11 +128,7 @@ impl Instance {
             .join(self.config.mode.display())
     }
 
-    fn prepare(&self) {
-        println!("Preparing {}", self.display());
-
-        t!(fs::create_dir_all(self.path()));
-
+    fn cargo(&self) -> Command {
         let mut output = Command::new("cargo");
         output
             .current_dir(&self.config.bench.cargo_dir)
@@ -148,9 +144,34 @@ impl Instance {
                     .join("rustc"),
             )
             .env("RUSTFLAGS", "-Ztime")
-            .env("CARGO_INCREMENTAL", "0")
-            .env("CARGO_TARGET_DIR", self.path().join("target"))
-            .arg("check");
+            .env(
+                "CARGO_INCREMENTAL",
+                if self.config.incremental { "1" } else { "0" },
+            )
+            .env("CARGO_TARGET_DIR", self.path().join("target"));
+
+        match self.config.mode {
+            BenchMode::Check => {
+                output.arg("check");
+            }
+            BenchMode::Debug => {
+                output.arg("build");
+            }
+            BenchMode::Release => {
+                output.arg("build");
+                output.arg("--release");
+            }
+        }
+
+        output
+    }
+
+    fn prepare(&self) {
+        println!("Preparing {}", self.display());
+
+        t!(fs::create_dir_all(self.path()));
+
+        let mut output = self.cargo();
         //.arg("-vv");
 
         let output = t!(output.output());
@@ -171,33 +192,23 @@ impl Instance {
         println!("Prepared {}", self.display());
     }
 
-    fn run(&mut self, warmup: bool) {
+    fn remove_fingerprint(&self) {
         let fingerprint_dir = self
             .path()
             .join("target")
-            .join("debug")
+            .join(match self.config.mode {
+                BenchMode::Check | BenchMode::Debug => "debug",
+                BenchMode::Release => "release",
+            })
             .join(".fingerprint");
 
         remove_fingerprint(&fingerprint_dir, &self.config.bench.name);
+    }
 
-        let mut output = Command::new("cargo");
-        output
-            .current_dir(&self.config.bench.cargo_dir)
-            .stdin(Stdio::null())
-            .env(
-                "RUSTC",
-                self.state
-                    .root
-                    .join("builds")
-                    .join(&self.build)
-                    .join("stage1")
-                    .join("bin")
-                    .join("rustc"),
-            )
-            .env("RUSTFLAGS", "-Ztime")
-            .env("CARGO_INCREMENTAL", "0")
-            .env("CARGO_TARGET_DIR", self.path().join("target"))
-            .arg("check");
+    fn run(&mut self, warmup: bool) {
+        self.remove_fingerprint();
+
+        let mut output = self.cargo();
 
         let start = Instant::now();
         let output = t!(output.output());
@@ -453,10 +464,21 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         let rows: Vec<_> = configs
             .iter()
             .map(|config| {
+                let first = config.builds.first().unwrap().summary_time();
                 let mut row: Vec<String> = config
                     .builds
                     .iter()
-                    .map(|build| format!("{:.06}", build.summary_time()))
+                    .enumerate()
+                    .map(|(i, build)| {
+                        let time = build.summary_time();
+                        let change = (time / first) - 1.0;
+                        let change = if i > 0 {
+                            format!(" : {:+.02}%", change * 100.0)
+                        } else {
+                            String::new()
+                        };
+                        format!("{:.06} {}", build.summary_time(), change)
+                    })
                     .collect();
                 row.insert(0, config.config.bench.name.clone());
                 row
@@ -494,7 +516,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         benchs: configs
             .iter()
             .map(|config| ResultBench {
-                name: config.config.bench.name.clone(),
+                name: config.config.display(),
                 builds: config
                     .builds
                     .iter()

@@ -1,5 +1,23 @@
 console.log("Report JSON", DATA);
 
+function format_bench(name) {
+    let parts = name.split(":");
+
+    if (parts.length > 1) {
+        if (parts[1] == 'debug') {
+            parts[1] = `<span class="bench-debug">debug</span>`
+        }
+        if (parts[1] == 'check') {
+            parts[1] = `<span class="bench-check">check</span>`
+        }
+        if (parts[1] == 'release') {
+            parts[1] = `<span class="bench-release">release</span>`
+        }
+    }
+
+    return `<span class="bench-name">${parts.join(`<span class="bench-colon">:</span>`)}</span>`;
+}
+
 function format_time(secs) {
     return `${secs.toFixed(4)}s`;
 }
@@ -99,8 +117,6 @@ function bench_detail(bench) {
         });
     });
 
-    console.log(data);
-
     let table = {
         type: 'Stage',
         columns: [{ name: 'Time', format: format_time }, { name: 'Memory', format: format_size }],
@@ -112,7 +128,7 @@ function bench_detail(bench) {
         })
     };
 
-    return `<div><h3 id="${bench.name}">Details of <b>${bench.name}</b></h3>${diff_table(table)}</div>`;
+    return `<div><h3 id="${bench.name}">Details of <b>${format_bench(bench.name)}</b></h3>${diff_table(table)}</div>`;
 }
 
 function escapeHTML(str) {
@@ -153,10 +169,10 @@ function build_details() {
         common_opts = []
     }
 
-    let result = ``;
+    let result = `<div class="build-container">`;
 
     if (common_opts.length > 0) {
-        result += `<div class="build-container"><div class="build"><h3>Common build options</h3>`;
+        result += `<div class="build"><h3>Common build options</h3>`;
         for (const opt of common_opts) {
             result += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${escapeHTML(JSON.stringify(opt[1]))}</b></p></div>`;
         }
@@ -174,8 +190,11 @@ function build_details() {
         let opts = build.config_linearized.filter(opt => common_opts.find(common_opt => JSON.stringify(opt) == JSON.stringify(common_opt)) === undefined);
 
         if (opts.length > 0) {
-
-            result += `<div class="extra-opts"><h4>Additional build options:</h4>`;
+            if (DATA.builds.length > 1) {
+                result += `<div class="extra-opts"><h4>Additional build options:</h4>`;
+            } else {
+                result += `<div><h4>Build options:</h4>`;
+            }
 
             for (const opt of opts) {
                 result += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${escapeHTML(JSON.stringify(opt[1]))}</b></p></div>`;
@@ -245,7 +264,7 @@ function summary() {
         rows: DATA.benchs.map(bench => {
             let times = bench.builds.map(build => average_by(build.time));
             let rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024));
-            return { name: `<a href="#${bench.name}">${bench.name}</a>`, columns: [times, rss] };
+            return { name: `<a href="#${bench.name}">${format_bench(bench.name)}</a>`, columns: [times, rss] };
         })
     };
 
@@ -286,7 +305,7 @@ const build_sizes = (() => {
         ]
     };
 
-    return `<div><h3>Build size comparison</h3>${diff_table(size)}</div>`;
+    return `<div><h3>Build size summary</h3>${diff_table(size)}</div>`;
 })();
 
 let file_map = {};

@@ -38,8 +38,40 @@ th {
     font-weight: normal;
 }
 
-.bh {
+.bh,
+.bench-name {
     font-weight: bold;
+}
+
+.bench-colon {
+    color: rgb(109, 109, 109);
+}
+
+.bench-debug {
+    font-weight: normal;
+    color: rgb(145, 113, 55);
+}
+
+a:hover .bench-debug {
+    color: rgb(175, 142, 81);
+}
+
+.bench-check {
+    font-weight: normal;
+    color: rgb(121, 40, 124);
+}
+
+a:hover .bench-check {
+    color: rgb(167, 74, 170);
+}
+
+.bench-release {
+    font-weight: normal;
+    color: rgb(43, 91, 136);
+}
+
+a:hover .bench-release {
+    color: rgb(66, 124, 179);
 }
 
 .extra-opts {
@@ -51,15 +83,17 @@ th {
     box-shadow: 0.1em 0.1em 1.7em rgba(90, 45, 99, 0.473);
     border-radius: 5px;
     border: 0px solid rgb(107, 45, 95);
-    /*width: fit-content;*/
-    /*margin: auto;
-    margin-bottom: 2em;
-    margin-top: 2em;*/
+    text-shadow: 0px 1px 3px rgba(0, 0, 0, 0.445);
+}
+
+.build h4 {
+    margin: 0.5em;
+    margin-top: 1em;
+    text-align: left;
 }
 
 .extra-opts > h4 {
     margin: 0.5em;
-    text-align: left;
 }
 
 .flex > div {
