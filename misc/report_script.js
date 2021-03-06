@@ -1,34 +1,30 @@
 console.log(DATA);
 
-let summary = `<table><tr><th rowspan="2">Benchmark</th>`;
-
-for (let i = 0; i < DATA.benchs[0].builds.length; i++) {
-    const config = DATA.benchs[0].builds[i];
-    summary += `<th colspan="${i > 0 ? 2 : 1}">${config.build}</th>`
+function format_time(secs) {
+    return `${secs.toFixed(4)}s`;
 }
 
-for (let i = 0; i < DATA.benchs[0].builds.length; i++) {
-    const config = DATA.benchs[0].builds[i];
-    summary += `<th colspan="${i > 0 ? 2 : 1}">${config.build}</th>`
-}
-
-summary += "</tr><tr>";
-
-for (let i = 0; i < DATA.benchs[0].builds.length; i++) {
-    summary += `<th class="r">Time</th>`;
-    if (i > 0) {
-        summary += `<th class="r">%</th>`;
+function format_size(bytes) {
+    if (bytes >= 1073741824) {
+        return (bytes / 1073741824).toFixed(2) + " GiB";
     }
-}
-
-for (let i = 0; i < DATA.benchs[0].builds.length; i++) {
-    summary += `<th class="r">Memory</th>`;
-    if (i > 0) {
-        summary += `<th class="r">%</th>`;
+    else if (bytes >= 1048576) {
+        return (bytes / 1048576).toFixed(2) + " MiB";
     }
+    else if (bytes >= 1024) {
+        return (bytes / 1024).toFixed(2) + " KiB";
+    }
+    else if (bytes > 1) {
+        return bytes + " bytes";
+    }
+    else if (bytes == 1) {
+        return bytes + " byte";
+    }
+    else if (bytes == 0) {
+        return "0 bytes";
+    }
+    throw "unable to convert bytes";
 }
-
-summary += "</tr>";
 
 function change(average, first, b) {
     if (!b) {
@@ -72,42 +68,7 @@ function max_rss(time) {
     }, 0);
 }
 
-for (const bench of DATA.benchs) {
-
-    summary += `<tr><th><a href="#${bench.name}">${bench.name}</a></th>`;
-
-    let first = average_by(bench.builds[0].time);
-
-    for (let i = 0; i < bench.builds.length; i++) {
-        const config = bench.builds[i];
-        let average = average_by(config.time);
-        summary += `<td>${average.toFixed(4)}s</td>`
-        if (i > 0) {
-            let change = (average / first - 1) * 100;
-            summary += `<td class=${change_class(change)}> ${change.toFixed(2)}%</td>`;
-        }
-    }
-
-    let first_rss = average_by(bench.builds[0].times, time => max_rss(time));
-
-    for (let i = 0; i < bench.builds.length; i++) {
-        const config = bench.builds[i];
-        let average = average_by(config.times, time => max_rss(time));
-        summary += `<td>${average.toFixed(2)} MiB</td>`
-        if (i > 0) {
-            let change = (average / first_rss - 1) * 100;
-            summary += `<td class=${change_class(change)}> ${change.toFixed(2)}%</td>`;
-        }
-    }
-
-    summary += "</tr>";
-
-}
-
-summary += "</table>";
-
 let benchs = "";
-
 
 for (const bench of DATA.benchs) {
     benchs += `<h3 id="${bench.name}">Details of <b>${bench.name}</b></h3><table><tr><th rowspan="2">Stage</th>`
@@ -198,63 +159,200 @@ for (const bench of DATA.benchs) {
     benchs += `</table>`;
 }
 
-function linearize(keys, path, out) {
-    for (const key in keys) {
-        let new_path = path.concat([key]);
-        if (typeof keys[key] === 'object') {
-            linearize(keys[key], new_path, out)
-        } else {
-            out.push([new_path, keys[key]]);
+function escapeHTML(str) {
+    var p = document.createElement("p");
+    p.innerText = str
+    return p.innerHTML;
+}
+
+function build_details() {
+    const BENIGN_OPTS = ['changelog-seen', 'rust.deny-warnings', 'rust.deny-warnings', 'build.low-priority'];
+
+    function linearize(keys, path, out) {
+        for (const key in keys) {
+            let new_path = path.concat([key]);
+            if (typeof keys[key] === 'object') {
+                linearize(keys[key], new_path, out)
+            } else {
+                if (!BENIGN_OPTS.includes(new_path.join('.'))) {
+                    out.push([new_path, keys[key]]);
+                }
+            }
         }
     }
-}
 
-for (const build of DATA.builds) {
-    let out = [];
-    linearize(build.config, [], out);
-    build.config_linearized = out;
-}
+    for (const build of DATA.builds) {
+        let out = [];
+        linearize(build.config, [], out);
+        build.config_linearized = out;
+    }
 
-let common_opts = DATA.builds[0].config_linearized.filter(opt => {
-    return DATA.builds.every(build => {
-        return build.config_linearized.find(build_opt => JSON.stringify(opt) == JSON.stringify(build_opt)) !== undefined
+    let common_opts = DATA.builds[0].config_linearized.filter(opt => {
+        return DATA.builds.every(build => {
+            return build.config_linearized.find(build_opt => JSON.stringify(opt) == JSON.stringify(build_opt)) !== undefined
+        });
     });
+
+    if (DATA.builds.length == 1) {
+        common_opts = []
+    }
+
+    let result = ``;
+
+    if (common_opts.length > 0) {
+        result += `<div class="build-container"><div class="build"><h3>Common build options</h3>`;
+        for (const opt of common_opts) {
+            result += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${escapeHTML(JSON.stringify(opt[1]))}</b></p></div>`;
+        }
+        result += `</div>`;
+    }
+
+    for (let i = 0; i < DATA.builds.length; i++) {
+        let build = DATA.builds[i];
+        result += `<div class="build"><h3>Build <b>${build.name}</b></h3>`;
+        result += `<div class="split"><p>Git commit:</p><p><b>${build.commit_short}</b></p></div>`;
+        result += `<div class="split"><p>Git branch:</p><p><b>${build.branch}</b></p></div>`;
+        result += `<div class="split"><p>Triple:</p><p><b>${build.triple}</b></p></div>`;
+        result += `<div class="split"><p>From repo:</p><p><b>${build.repo}</b> at ${build.repo_path}</p></div>`;
+
+        let opts = build.config_linearized.filter(opt => common_opts.find(common_opt => JSON.stringify(opt) == JSON.stringify(common_opt)) === undefined);
+
+        if (opts.length > 0) {
+
+            result += `<div class="extra-opts"><h4>Additional build options:</h4>`;
+
+            for (const opt of opts) {
+                result += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${escapeHTML(JSON.stringify(opt[1]))}</b></p></div>`;
+
+            }
+            result += `</div>`;
+        }
+
+        result += `</div>`;
+    }
+
+    result += `</div>`;
+
+    return result;
+}
+
+function diff_table(data) {
+    let result = `<table><tr><th rowspan="2">${data.type}</th>`;
+
+    for (const column of data.columns) {
+        for (let i = 0; i < DATA.builds.length; i++) {
+            const build = DATA.builds[i];
+            result += `<th colspan="${i > 0 ? 2 : 1}" class="bh">${build.name}</th>`
+        }
+    }
+
+    result += "</tr><tr>";
+
+    for (const column of data.columns) {
+        for (let i = 0; i < DATA.builds.length; i++) {
+            result += `<th class="r">${column.name}</th>`;
+            if (i > 0) {
+                result += `<th class="r">%</th>`;
+            }
+        }
+    }
+
+    result += "</tr>";
+
+    for (const row of data.rows) {
+        result += `<tr><th>${row.name}</th>`;
+
+        for (let i = 0; i < row.columns.length; i++) {
+            const column = row.columns[i];
+            let first = column[0];
+            let format = data.columns[i].format;
+
+            for (let j = 0; j < DATA.builds.length; j++) {
+                result += `<td>${format(column[j])}</td>`
+                if (j > 0) {
+                    let change = (column[j] / first - 1) * 100;
+                    result += `<td class=${change_class(change)}> ${change.toFixed(2)}%</td>`;
+                }
+            }
+        }
+        result += "</tr>";
+    }
+    result += "</table>";
+
+    return result;
+}
+
+function summary() {
+    let summary = {
+        type: 'Benchmark',
+        columns: [{ name: 'Time', format: format_time }, { name: 'Memory', format: format_size }],
+        rows: DATA.benchs.map(bench => {
+            let times = bench.builds.map(build => average_by(build.time));
+            let rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024));
+            return { name: `<a href="#${bench.name}">${bench.name}</a>`, columns: [times, rss] };
+        })
+    };
+
+    return `<h3>Build comparison</h3>${diff_table(summary)}`;
+}
+
+let dbg_filter = file => !file.path.endsWith(".pdb");
+
+let std_sizes = DATA.builds.map(build => {
+    return build.files.filter(dbg_filter)
+        .filter(file => file.path.replaceAll("\\", "/").startsWith(`lib/rustlib/${build.triple}/lib/`))
+        .reduce((a, b) => a + b.size, 0);
 });
 
-if (DATA.builds.length == 1) {
-    common_opts = []
-}
+let compiler_sizes = DATA.builds.map(build => {
+    return build.files.filter(dbg_filter)
+        .filter(file => file.path.replaceAll("\\", "/").startsWith("bin/"))
+        .reduce((a, b) => a + b.size, 0);
+});
 
-summary += `<div class="build-container"><div class="build"><h3>Common build options</h3>`;
-for (const opt of common_opts) {
-    summary += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${opt[1]}</b></p></div>`;
-}
-summary += `</div>`;
+let total_sizes = DATA.builds.map(build => {
+    return build.files.filter(dbg_filter).reduce((a, b) => a + b.size, 0);
+});
 
-for (let i = 0; i < DATA.builds.length; i++) {
-    let build = DATA.builds[i];
-    summary += `<div class="build"><h3>Build <b>${build.name}</b></h3>`;
-    summary += `<div class="split"><p>Git commit:</p><p><b>${build.commit_short}</b></p></div>`;
-    summary += `<div class="split"><p>Git branch:</p><p><b>${build.branch}</b></p></div>`;
-    summary += `<div class="split"><p>Triple:</p><p><b>${build.triple}</b></p></div>`;
-    summary += `<div class="split"><p>From repo:</p><p><b>${build.repo}</b> at ${build.repo_path}</p></div>`;
+let total_with_dbg_sizes = DATA.builds.map(build => {
+    return build.files.reduce((a, b) => a + b.size, 0);
+});
 
-    let opts = build.config_linearized.filter(opt => common_opts.find(common_opt => JSON.stringify(opt) == JSON.stringify(common_opt)) === undefined);
+let size = {
+    type: 'Build size',
+    columns: [{ name: 'Size', format: format_size }],
+    rows: [
+        { name: 'Compiler size', columns: [compiler_sizes] },
+        { name: 'Std size', columns: [std_sizes] },
+        { name: 'Total size', columns: [total_sizes] },
+        { name: 'Total with debug info', columns: [total_with_dbg_sizes] }
+    ]
+};
 
-    if (opts.length > 0) {
+const build_sizes = `<h3>Build comparison</h3>${diff_table(size)}`;
 
-        summary += `<h4>Additional build options:</h4>`;
+let files = {};
 
-        for (const opt of opts) {
-            summary += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${opt[1]}</b></p></div>`;
-
-        }
+for (const build of DATA.builds) {
+    for (const file of build.files) {
+        files[file[0]] = true;
     }
-
-    summary += `</div>`;
 }
 
-summary += `</div>`;
+console.log(Object.keys(files));
+
+let file_size = {
+    type: 'Build size',
+    columns: [{ name: 'Size', format: format_size }],
+    rows: [
+        { name: 'Compiler size', columns: [compiler_sizes] },
+        { name: 'Std size', columns: [std_sizes] },
+        { name: 'Total size', columns: [total_sizes] },
+        { name: 'Total with debug info', columns: [total_with_dbg_sizes] }
+    ]
+};
+
+const file_sizes = `<h3>Build file size details</h3>${diff_table(file_size)}`;
 
 let title = `Benchmark result for `;
 
@@ -266,4 +364,4 @@ for (let i = 0; i < DATA.benchs[0].builds.length; i++) {
 }
 
 
-document.body.innerHTML = `<div><h1>${title}</h1>${summary}${benchs}</div>`;
+document.body.innerHTML = `<div><h1>${title}</h1>${summary()}${build_details()}${build_sizes}${benchs}</div>`;

@@ -35,6 +35,31 @@ a:hover {
 td,
 th {
     padding: 0.5em;
+    font-weight: normal;
+}
+
+.bh {
+    font-weight: bold;
+}
+
+.extra-opts {
+    padding: 1em;
+    margin: 0em;
+    margin-top: 1em;
+    background: #9b5b8d;
+    color: rgb(241, 229, 240);
+    box-shadow: 0.1em 0.1em 1.7em rgba(90, 45, 99, 0.473);
+    border-radius: 5px;
+    border: 0px solid rgb(107, 45, 95);
+    /*width: fit-content;*/
+    /*margin: auto;
+    margin-bottom: 2em;
+    margin-top: 2em;*/
+}
+
+.extra-opts > h4 {
+    margin: 0.5em;
+    text-align: left;
 }
 
 .build-container {
@@ -55,12 +80,6 @@ th {
     /*margin: auto;
     margin-bottom: 2em;
     margin-top: 2em;*/
-}
-
-.build > h4 {
-    margin: 0.5em;
-    margin-top: 1em;
-    text-align: left;
 }
 
 .build > h3 {

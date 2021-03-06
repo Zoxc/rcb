@@ -283,6 +283,8 @@ impl Instance {
 }
 
 pub fn bench(state: Arc<State>, matches: &ArgMatches) {
+    let start = Instant::now();
+
     let iterations =
         value_t!(matches, "iterations", usize).unwrap_or(state.config.iterations.unwrap_or(8));
     let iterations = std::cmp::max(1, iterations);
@@ -423,13 +425,13 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     });
 
     for config in &mut configs {
+        // Warm up run
         for instance in &mut *config.builds {
-            println!("Warming up {}", instance.display());
             instance.run(true);
         }
+
         for _ in 0..iterations {
             for instance in &mut *config.builds {
-                println!("Benching {}", instance.display());
                 instance.run(false);
             }
         }
@@ -531,4 +533,11 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     t!(file.write_all(report.as_bytes()));
 
     println!("Extended report at {}", path.display());
+
+    let duration = start.elapsed();
+    let seconds = duration.as_secs() % 60;
+    let minutes = (duration.as_secs() / 60) % 60;
+    let hours = minutes / 60;
+
+    println!("Completed in {}:{}:{}", hours, minutes, seconds);
 }

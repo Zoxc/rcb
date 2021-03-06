@@ -1,5 +1,6 @@
 use crate::temp_dir;
 use crate::Build;
+use crate::BuildFile;
 use crate::OnDrop;
 use crate::State;
 use clap::ArgMatches;
@@ -108,7 +109,7 @@ fn sha256_from_file(path: &Path, context: &mut Context) -> io::Result<()> {
     sha256_digest(reader, context)
 }
 
-fn get_build_signature(dir: &Path) -> (String, u64, Vec<(String, u64)>) {
+fn get_build_signature(dir: &Path) -> (String, u64, Vec<BuildFile>) {
     let mut files = Vec::new();
 
     list_files(&dir, &Path::new(""), &mut files);
@@ -117,10 +118,13 @@ fn get_build_signature(dir: &Path) -> (String, u64, Vec<(String, u64)>) {
 
     let sizes: Vec<_> = files
         .iter()
-        .map(|file| (file.clone(), t!(dir.join(file).metadata()).len()))
+        .map(|file| BuildFile {
+            path: file.clone(),
+            size: t!(dir.join(file).metadata()).len(),
+        })
         .collect();
 
-    let size = sizes.iter().map(|s| s.1).sum();
+    let size = sizes.iter().map(|s| s.size).sum();
 
     let digests: Vec<_> = files
         .par_iter()

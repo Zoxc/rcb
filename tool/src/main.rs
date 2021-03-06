@@ -54,6 +54,12 @@ mod bench;
 mod fetch;
 
 #[derive(Serialize, Deserialize, Debug)]
+struct BuildFile {
+    path: String,
+    size: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct Build {
     name: String,
     path: String,
@@ -65,7 +71,7 @@ struct Build {
     size: u64,
     signature: String,
     triple: String,
-    files: Vec<(String, u64)>,
+    files: Vec<BuildFile>,
     config: toml::Value,
 }
 
