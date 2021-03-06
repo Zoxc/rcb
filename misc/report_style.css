@@ -4,7 +4,7 @@ body {
     height: 100%;
     font-family: Arial, Helvetica, sans-serif;
     font-size: 13px;
-    background-color: #eeeeee;
+    background: #f5f5f5;
     color: #333333;
 }
 
@@ -35,6 +35,46 @@ a:hover {
 td,
 th {
     padding: 0.5em;
+}
+
+.build-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.build {
+    padding: 1.5em;
+    margin: 1.5em;
+    background: #f7f5f5;
+    box-shadow: 0.1em 0.1em 1.7em rgba(0, 0, 0, 0.08);
+    border-radius: 5px;
+    border: 1px solid rgb(218, 218, 218);
+    width: fit-content;
+    /*margin: auto;
+    margin-bottom: 2em;
+    margin-top: 2em;*/
+}
+
+.build > h4 {
+    margin: 0.5em;
+    margin-top: 1em;
+    text-align: left;
+}
+
+.build > h3 {
+    padding: 0.2em;
+    padding-bottom: 1.1em;
+}
+
+.split {
+    display: flex;
+    justify-content: space-between;
+}
+
+.split p {
+    margin: 0.5em;
 }
 
 td {
@@ -79,11 +119,8 @@ h3 {
 body > div {
     text-align: center;
     background: #f5f5f5;
-    margin: auto;
-    width: 60%;
-    min-height: 100%;
-    min-width: 900px;
-    display: block;
+    margin: 0;
+    padding: 0;
     padding-bottom: 2em;
 }
 

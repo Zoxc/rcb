@@ -108,17 +108,19 @@ fn sha256_from_file(path: &Path, context: &mut Context) -> io::Result<()> {
     sha256_digest(reader, context)
 }
 
-fn get_build_signature(dir: &Path) -> (String, u64) {
+fn get_build_signature(dir: &Path) -> (String, u64, Vec<(String, u64)>) {
     let mut files = Vec::new();
 
     list_files(&dir, &Path::new(""), &mut files);
 
     files.sort();
 
-    let size = files
+    let sizes: Vec<_> = files
         .iter()
-        .map(|file| t!(dir.join(file).metadata()).len())
-        .sum();
+        .map(|file| (file.clone(), t!(dir.join(file).metadata()).len()))
+        .collect();
+
+    let size = sizes.iter().map(|s| s.1).sum();
 
     let digests: Vec<_> = files
         .par_iter()
@@ -140,7 +142,7 @@ fn get_build_signature(dir: &Path) -> (String, u64) {
 
     let signature = context.finish();
 
-    (HEXLOWER.encode(signature.as_ref()), size)
+    (HEXLOWER.encode(signature.as_ref()), size, sizes)
 }
 
 fn find_build_name(state: &State, prefix: &str, signature: &str) -> (String, PathBuf) {
@@ -202,7 +204,8 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
         &["symbolic-ref", "--short", "-q", "HEAD"],
         &repo_path,
     );
-    let commit = capture("git", &["rev-parse", "--short", "-q", "HEAD"], &repo_path);
+    let commit = capture("git", &["rev-parse", "-q", "HEAD"], &repo_path);
+    let commit_short = capture("git", &["rev-parse", "--short", "-q", "HEAD"], &repo_path);
 
     match (&branch, &commit) {
         (Some(branch), Some(commit)) => println!("From git branch {} on commit {}", branch, commit),
@@ -218,7 +221,7 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
 
     copy_recursively(&state, &stage1, &tmp_path.join("stage1"));
 
-    let (signature, build_size) = get_build_signature(&tmp_path);
+    let (signature, build_size, files) = get_build_signature(&tmp_path.join("stage1"));
 
     let (name, build_path) = find_build_name(
         &state,
@@ -229,26 +232,25 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
     t!(fs::rename(&tmp_path, &build_path));
 
     {
+        let config = t!(fs::read_to_string(repo_path.join("config.toml")));
+        let config: toml::Value = toml::from_str(&config).expect("Invalid config.toml");
+
         let build = Build {
             name: name.clone(),
+            path: "stage1".to_owned(),
             repo,
             repo_path: repo_path.clone(),
             branch,
             commit,
+            commit_short,
             size: build_size,
-            size_display: kib::format(build_size),
             signature,
             triple: TRIPLE.to_owned(),
+            files,
+            config,
         };
         let mut file = t!(File::create(build_path.join("build.toml")));
         t!(file.write_all(toml::to_string_pretty(&build).unwrap().as_bytes()));
-    }
-
-    {
-        let build_config = t!(fs::read_to_string(repo_path.join("config.toml")));
-        let build_config: toml::Value = toml::from_str(&build_config).expect("Invalid config.toml");
-        let mut file = t!(File::create(build_path.join("config.toml")));
-        t!(file.write_all(toml::to_string_pretty(&build_config).unwrap().as_bytes()));
     }
 
     println!("Build {} ({})", name, kib::format(build_size));

@@ -141,7 +141,6 @@ for (const bench of DATA.benchs) {
     benchs += "</tr>";
 
     let data = bench.builds.map(build => {
-        console.log(build.build, "build", build);
         let entries = {};
 
         for (const instance of build.times) {
@@ -161,8 +160,6 @@ for (const bench of DATA.benchs) {
                 rss: average_by(entries[entry], entry => parseFloat(entry.after_rss)),
             };
         }
-
-        console.log(build.build, "entries_avg", entries_avg);
 
         return entries_avg;
     });
@@ -200,6 +197,64 @@ for (const bench of DATA.benchs) {
 
     benchs += `</table>`;
 }
+
+function linearize(keys, path, out) {
+    for (const key in keys) {
+        let new_path = path.concat([key]);
+        if (typeof keys[key] === 'object') {
+            linearize(keys[key], new_path, out)
+        } else {
+            out.push([new_path, keys[key]]);
+        }
+    }
+}
+
+for (const build of DATA.builds) {
+    let out = [];
+    linearize(build.config, [], out);
+    build.config_linearized = out;
+}
+
+let common_opts = DATA.builds[0].config_linearized.filter(opt => {
+    return DATA.builds.every(build => {
+        return build.config_linearized.find(build_opt => JSON.stringify(opt) == JSON.stringify(build_opt)) !== undefined
+    });
+});
+
+if (DATA.builds.length == 1) {
+    common_opts = []
+}
+
+summary += `<div class="build-container"><div class="build"><h3>Common build options</h3>`;
+for (const opt of common_opts) {
+    summary += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${opt[1]}</b></p></div>`;
+}
+summary += `</div>`;
+
+for (let i = 0; i < DATA.builds.length; i++) {
+    let build = DATA.builds[i];
+    summary += `<div class="build"><h3>Build <b>${build.name}</b></h3>`;
+    summary += `<div class="split"><p>Git commit:</p><p><b>${build.commit_short}</b></p></div>`;
+    summary += `<div class="split"><p>Git branch:</p><p><b>${build.branch}</b></p></div>`;
+    summary += `<div class="split"><p>Triple:</p><p><b>${build.triple}</b></p></div>`;
+    summary += `<div class="split"><p>From repo:</p><p><b>${build.repo}</b> at ${build.repo_path}</p></div>`;
+
+    let opts = build.config_linearized.filter(opt => common_opts.find(common_opt => JSON.stringify(opt) == JSON.stringify(common_opt)) === undefined);
+
+    if (opts.length > 0) {
+
+        summary += `<h4>Additional build options:</h4>`;
+
+        for (const opt of opts) {
+            summary += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${opt[1]}</b></p></div>`;
+
+        }
+    }
+
+    summary += `</div>`;
+}
+
+summary += `</div>`;
 
 let title = `Benchmark result for `;
 

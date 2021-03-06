@@ -56,14 +56,17 @@ mod fetch;
 #[derive(Serialize, Deserialize, Debug)]
 struct Build {
     name: String,
+    path: String,
     repo: String,
     repo_path: PathBuf,
     branch: Option<String>,
     commit: Option<String>,
-    size_display: String,
+    commit_short: Option<String>,
     size: u64,
     signature: String,
     triple: String,
+    files: Vec<(String, u64)>,
+    config: toml::Value,
 }
 
 #[derive(Deserialize, Debug)]
@@ -158,6 +161,13 @@ fn main() {
         .arg(Arg::with_name("REPO"));
     let bench = SubCommand::with_name("bench")
         .arg(Arg::with_name("BUILD").multiple(true).required(true))
+        .arg(
+            Arg::with_name("bench")
+                .multiple(true)
+                .short("-b")
+                .long("bench")
+                .takes_value(true),
+        )
         .arg(Arg::with_name("iterations").short("n").takes_value(true))
         .arg(Arg::with_name("check").long("--check"))
         .arg(Arg::with_name("release").long("--release"))

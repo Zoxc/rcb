@@ -94,6 +94,7 @@ struct ResultBench {
 
 #[derive(Serialize)]
 struct Result {
+    builds: Vec<Build>,
     benchs: Vec<ResultBench>,
 }
 
@@ -304,13 +305,13 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
                 i + 1,
                 build_name,
                 build.commit.as_deref().unwrap_or(""),
-                build.size_display
+                kib::format(build.size),
             );
             build
         })
         .collect();
 
-    let mut benchs: Vec<Arc<Bench>> = t!(fs::read_dir(state.root.join("benchs")))
+    let benchs: Vec<Arc<Bench>> = t!(fs::read_dir(state.root.join("benchs")))
         .filter_map(|f| {
             let f = t!(f);
             let path = f.path();
@@ -328,6 +329,26 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             }
         })
         .collect();
+
+    let selected_benchs: Vec<_> = matches
+        .values_of("bench")
+        .map(|b| b.collect())
+        .unwrap_or_default();
+
+    let benchs = if selected_benchs.is_empty() {
+        benchs
+    } else {
+        selected_benchs
+            .into_iter()
+            .map(|bench| {
+                benchs
+                    .iter()
+                    .find(|b| b.name == bench)
+                    .unwrap_or_else(|| panic!("Unable to find bench `{}`", bench))
+                    .clone()
+            })
+            .collect()
+    };
 
     let mut modes = Vec::new();
 
@@ -460,7 +481,14 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
 
     let mut file = t!(File::create(&path));
 
+    let title = builds
+        .iter()
+        .map(|build| build.name.as_str())
+        .collect::<Vec<_>>()
+        .join(" vs. ");
+
     let result = Result {
+        builds,
         benchs: configs
             .iter()
             .map(|config| ResultBench {
@@ -473,12 +501,6 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             })
             .collect(),
     };
-
-    let title = builds
-        .iter()
-        .map(|build| build.name.as_str())
-        .collect::<Vec<_>>()
-        .join(" vs. ");
 
     let result = serde_json::to_string(&result).unwrap();
 
