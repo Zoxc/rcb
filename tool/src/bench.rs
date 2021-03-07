@@ -38,7 +38,7 @@ impl Config {
     fn display(&self) -> String {
         let start = format!("{}:{}", self.bench.name, self.mode.display());
         match self.incremental {
-            IncrementalMode::Full => format!("{}:initial", start),
+            IncrementalMode::Initial => format!("{}:initial", start),
             IncrementalMode::Unchanged => format!("{}:unchanged", start),
             IncrementalMode::None => start,
         }
@@ -48,7 +48,7 @@ impl Config {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum IncrementalMode {
     None,
-    Full,
+    Initial,
     Unchanged,
 }
 
@@ -127,11 +127,7 @@ struct ConfigInstances {
 
 impl Instance {
     fn display(&self) -> String {
-        format!(
-            "benchmark {} with build `{}`",
-            self.config.display(),
-            self.build
-        )
+        format!("benchmark {} with {}", self.config.display(), self.build)
     }
 
     fn path(&self) -> PathBuf {
@@ -226,7 +222,7 @@ impl Instance {
             &self.config.bench.name,
         );
 
-        if self.config.incremental == IncrementalMode::Full {
+        if self.config.incremental == IncrementalMode::Initial {
             remove_fingerprint(&target_profile.join("incremental"), &self.config.bench.name);
         }
     }
@@ -413,8 +409,8 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         incr_modes.push(IncrementalMode::None);
     }
 
-    if matches.is_present("incr-full") {
-        incr_modes.push(IncrementalMode::Full);
+    if matches.is_present("incr-initial") {
+        incr_modes.push(IncrementalMode::Initial);
     }
 
     if matches.is_present("incr-unchanged") {
@@ -424,7 +420,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     if incr_modes.is_empty() {
         incr_modes = vec![
             IncrementalMode::None,
-            IncrementalMode::Full,
+            IncrementalMode::Initial,
             IncrementalMode::Unchanged,
         ];
     }

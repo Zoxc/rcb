@@ -170,17 +170,23 @@ fn main() {
         .arg(
             Arg::with_name("bench")
                 .multiple(true)
-                .short("-b")
+                .short("b")
                 .long("bench")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("threads")
+                .long("threads")
+                .takes_value(true)
+                .help("Don't pass -j1 to cargo"),
+        )
         .arg(Arg::with_name("iterations").short("n").takes_value(true))
-        .arg(Arg::with_name("incr-none").long("--incr-none"))
-        .arg(Arg::with_name("incr-full").long("--incr-full"))
-        .arg(Arg::with_name("incr-unchanged").long("--incr-unchanged"))
-        .arg(Arg::with_name("check").long("--check"))
-        .arg(Arg::with_name("release").long("--release"))
-        .arg(Arg::with_name("debug").long("--debug"));
+        .arg(Arg::with_name("incr-none").long("incr-none"))
+        .arg(Arg::with_name("incr-initial").long("incr-initial"))
+        .arg(Arg::with_name("incr-unchanged").long("incr-unchanged"))
+        .arg(Arg::with_name("check").long("check"))
+        .arg(Arg::with_name("release").long("release"))
+        .arg(Arg::with_name("debug").long("debug"));
     let matches = App::new("rcb")
         .about("Rust Compiler Bencher")
         .setting(AppSettings::SubcommandRequiredElseHelp)
