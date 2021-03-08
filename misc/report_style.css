@@ -136,13 +136,22 @@ a:hover .bench-incr {
     margin-top: 2em;*/
 }
 
+.common-build .build {
+    width: initial;
+}
+
 .bench-opt {
     padding: 0.3em;
-    background: #d6d6d62c;
-    box-shadow: 0.1em 0.1em 1.7em rgba(0, 0, 0, 0.08);
+    background: #ebe5d8;
+    box-shadow: 0.1em 0.1em 0.6em rgba(0, 0, 0, 0.055);
     border-radius: 5px;
-    border: 1px solid #dfdfdf8a;
+    border: 1px solid #cfc2a4;
     margin-right: 0.3em;
+}
+
+.extra-opts .bench-opt {
+    background: #d6d6d623;
+    border: 1px solid #dfdfdf8c;
 }
 
 .build p {

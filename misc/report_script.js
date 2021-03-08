@@ -209,20 +209,22 @@ function build_details() {
     }
 
     if (common_opts.length > 0) {
-        result += `<div class="build">`;
+        result += `<div class="common-build">`;
         let build_opts = common_opts.filter(opt => opt.type == 'x.py');
         if (build_opts.length > 0) {
-            result += `<h3>Common build options</h3>`;
+            result += `<div class="build"><h3>Common build options</h3>`;
             for (const opt of build_opts) {
                 result += render_opt(opt);
             }
+            result += `</div>`;
         }
         let bench_opts = common_opts.filter(opt => opt.type != 'x.py');
         if (bench_opts.length > 0) {
-            result += `<h3>Common bench options</h3>`;
+            result += `<div class="build"><h3>Common bench options</h3>`;
             for (const opt of bench_opts) {
                 result += render_opt(opt);
             }
+            result += `</div>`;
         }
         result += `</div>`;
     }
