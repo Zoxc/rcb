@@ -17,6 +17,16 @@ use std::{
     time::Instant,
 };
 
+#[derive(Serialize, Default)]
+struct BuildConfig {
+    index: usize,
+    name: String,
+    threads: bool,
+    rflags: Vec<String>,
+    cflags: Vec<String>,
+    envs: Vec<(String, String)>,
+}
+
 #[derive(Deserialize)]
 struct BenchToml {
     cargo_dir: Option<String>,
@@ -108,13 +118,14 @@ struct ResultBench {
 #[derive(Serialize)]
 struct Result {
     builds: Vec<Build>,
+    build_configs: Vec<Arc<BuildConfig>>,
     benchs: Vec<ResultBench>,
 }
 
 struct Instance {
     session_dir: PathBuf,
     state: Arc<State>,
-    build: String,
+    build: Arc<BuildConfig>,
     config: Config,
     time: Vec<f64>,
     times: Vec<Vec<TimeData>>,
@@ -127,14 +138,19 @@ struct ConfigInstances {
 
 impl Instance {
     fn display(&self) -> String {
-        format!("benchmark {} with {}", self.config.display(), self.build)
+        format!(
+            "benchmark {} with {}",
+            self.config.display(),
+            self.build.name
+        )
     }
 
     fn path(&self) -> PathBuf {
-        self.session_dir
-            .join(&self.build)
-            .join(&self.config.bench.name)
-            .join(self.config.mode.display())
+        self.session_dir.join(format!(
+            "{}-{}",
+            self.build.index,
+            &self.config.display().replace(":", "$")
+        ))
     }
 
     fn cargo(&self) -> Command {
@@ -147,12 +163,11 @@ impl Instance {
                 self.state
                     .root
                     .join("builds")
-                    .join(&self.build)
+                    .join(&self.build.name)
                     .join("stage1")
                     .join("bin")
                     .join("rustc"),
             )
-            .env("RUSTFLAGS", "-Ztime")
             .env(
                 "CARGO_INCREMENTAL",
                 if self.config.incremental != IncrementalMode::None {
@@ -161,7 +176,7 @@ impl Instance {
                     "0"
                 },
             )
-            .env("CARGO_TARGET_DIR", self.path().join("target"));
+            .env("CARGO_TARGET_DIR", self.path());
 
         match self.config.mode {
             BenchMode::Check => {
@@ -176,11 +191,25 @@ impl Instance {
             }
         }
 
+        let mut rflags = vec!["-Ztime".to_owned()];
+        rflags.extend_from_slice(&self.build.rflags);
+        output.env("RUSTFLAGS", rflags.join(" "));
+
+        if !self.build.threads {
+            output.arg("-j1");
+        }
+        for cflag in &self.build.cflags {
+            output.arg(cflag);
+        }
+        for (env, val) in &self.build.envs {
+            output.env(env, val);
+        }
+
         output
     }
 
     fn prepare(&mut self) {
-        println!("Preparing {}", self.display());
+        println!("Preparing {}", self.display(),);
 
         t!(fs::create_dir_all(self.path()));
 
@@ -212,7 +241,7 @@ impl Instance {
     }
 
     fn remove_fingerprint(&self) {
-        let target_profile = self.path().join("target").join(match self.config.mode {
+        let target_profile = self.path().join(match self.config.mode {
             BenchMode::Check | BenchMode::Debug => "debug",
             BenchMode::Release => "release",
         });
@@ -308,11 +337,93 @@ impl Instance {
 
     fn result(&self) -> ResultConfig {
         ResultConfig {
-            build: self.build.clone(),
+            build: self.build.name.clone(),
             time: self.time.clone(),
             times: self.times.clone(),
         }
     }
+}
+
+fn build_opt(
+    matches: &ArgMatches,
+    name: &str,
+    has_value: bool,
+    builds: &mut [BuildConfig],
+    mut apply: impl FnMut(&mut BuildConfig, &str),
+) {
+    if let Some(args) = matches.values_of(name) {
+        for arg in args {
+            let (arg, val) = if has_value {
+                let i = arg
+                    .find(":")
+                    .unwrap_or_else(|| panic!("Argument `{}` to {} has no value", arg, name));
+                let (k, v) = arg.split_at(i + 1);
+                (k.strip_suffix(":").unwrap_or(k), v)
+            } else {
+                (arg, "")
+            };
+            for build in arg.split(",") {
+                if build == "a" {
+                    builds.iter_mut().for_each(|build| apply(build, val));
+                } else {
+                    let i = str::parse::<usize>(build)
+                        .unwrap_or_else(|_| panic!("Expected `a` or build numer for opt {}", name));
+                    let build = builds.get_mut(i - 1).unwrap_or_else(|| {
+                        panic!("Build number {} out of bounds for opt {}", i, name)
+                    });
+                    apply(build, val);
+                }
+            }
+        }
+    }
+}
+
+fn build_configs(matches: &ArgMatches, builds: &[Build]) -> Vec<Arc<BuildConfig>> {
+    let mut build_configs: Vec<_> = builds
+        .iter()
+        .enumerate()
+        .map(|(index, build)| BuildConfig {
+            index,
+            name: build.name.clone(),
+            ..Default::default()
+        })
+        .collect();
+
+    build_opt(
+        matches,
+        "threads",
+        false,
+        &mut build_configs,
+        |config, _| {
+            config.threads = true;
+        },
+    );
+
+    build_opt(matches, "rflag", true, &mut build_configs, |config, val| {
+        config.rflags.push(val.to_owned());
+    });
+
+    build_opt(matches, "cflag", true, &mut build_configs, |config, val| {
+        config.cflags.push(val.to_owned());
+    });
+
+    build_opt(matches, "env", true, &mut build_configs, |config, val| {
+        let i = val
+            .find("=")
+            .unwrap_or_else(|| panic!("Enviroment variable `{}` has no value", val));
+        let (k, v) = val.split_at(i + 1);
+        if k.len() < 2 {
+            panic!("Enviroment variable `{}` has no key", val);
+        }
+        config
+            .envs
+            .push((k[0..(k.len() - 1)].to_owned(), v.to_owned()));
+    });
+
+    build_configs
+        .into_iter()
+        .map(|config| Arc::new(config))
+        .collect()
 }
 
 pub fn bench(state: Arc<State>, matches: &ArgMatches) {
@@ -326,8 +437,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let builds: Vec<Build> = matches
         .values_of("BUILD")
         .unwrap()
-        .enumerate()
-        .map(|(i, build_name)| {
+        .map(|build_name| {
             let build_path = state.root.join("builds").join(build_name);
             let build = build_path.join("build.toml");
             if !build.exists() {
@@ -335,16 +445,35 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             }
             let build = t!(fs::read_to_string(build));
             let build: Build = t!(toml::from_str(&build));
-            println!(
-                "Build #{} {} ({} {})",
-                i + 1,
-                build_name,
-                build.commit.as_deref().unwrap_or(""),
-                kib::format(build.size),
-            );
             build
         })
         .collect();
+
+    let build_configs = build_configs(matches, &builds);
+
+    println!("");
+    for (i, (build, build_config)) in builds.iter().zip(build_configs.iter()).enumerate() {
+        println!(
+            "Build #{} {} ({} {})",
+            i + 1,
+            build.name,
+            build.commit.as_deref().unwrap_or(""),
+            kib::format(build.size),
+        );
+        if build_config.threads {
+            println!("    Default thread count");
+        }
+        for rflag in &build_config.rflags {
+            println!("    rustc:{}", rflag);
+        }
+        for cflag in &build_config.cflags {
+            println!("    cargo:{}", cflag);
+        }
+        for (env, val) in &build_config.envs {
+            println!("    env:{} = {}", env, val);
+        }
+        println!("");
+    }
 
     let benchs: Vec<Arc<Bench>> = t!(fs::read_dir(state.root.join("benchs")))
         .filter_map(|f| {
@@ -463,14 +592,14 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         .iter()
         .map(|config| ConfigInstances {
             config: config.clone(),
-            builds: builds
+            builds: build_configs
                 .iter()
                 .map(|build| Instance {
                     time: Vec::new(),
                     times: Vec::new(),
                     session_dir: session_dir.clone(),
                     state: state.clone(),
-                    build: build.name.clone(),
+                    build: build.clone(),
                     config: config.clone(),
                 })
                 .collect(),
@@ -561,6 +690,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
 
     let result = Result {
         builds,
+        build_configs,
         benchs: configs
             .iter()
             .map(|config| ResultBench {
@@ -579,7 +709,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let mut report = r#"<!doctype html>
     <html>
     <head>
-      <title>Benchmark result for "#
+      <title>Benchmark results for "#
         .to_string();
 
     report.push_str(&title);

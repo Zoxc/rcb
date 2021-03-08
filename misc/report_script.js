@@ -348,7 +348,7 @@ let file_size = {
 
 const file_sizes = `<div><h3>Build size details</h3>${diff_table(file_size)}</div>`;
 
-let title = `Benchmark result for `;
+let title = `Benchmark results for `;
 
 for (let i = 0; i < DATA.benchs[0].builds.length; i++) {
     if (i > 0) {

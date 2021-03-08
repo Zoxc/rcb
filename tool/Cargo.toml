@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 toml = "0.5"
 clap = "2.33.3"
-serde = "1.0.123"
+serde = { version = "1.0.123", features = ["rc"] }
 serde_derive = "1.0.123"
 rand = "0.8.3"
 ring = "0.16.20"

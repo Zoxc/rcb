@@ -180,6 +180,24 @@ fn main() {
                 .takes_value(true)
                 .help("Don't pass -j1 to cargo"),
         )
+        .arg(
+            Arg::with_name("rflag")
+                .long("rflag")
+                .takes_value(true)
+                .help("Arguments to rustc"),
+        )
+        .arg(
+            Arg::with_name("cflag")
+                .long("cflag")
+                .takes_value(true)
+                .help("Arguments to cargo"),
+        )
+        .arg(
+            Arg::with_name("env")
+                .long("env")
+                .takes_value(true)
+                .help("Enviroment variable to cargo"),
+        )
         .arg(Arg::with_name("iterations").short("n").takes_value(true))
         .arg(Arg::with_name("incr-none").long("incr-none"))
         .arg(Arg::with_name("incr-initial").long("incr-initial"))
