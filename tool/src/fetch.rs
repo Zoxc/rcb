@@ -208,6 +208,19 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
         &["symbolic-ref", "--short", "-q", "HEAD"],
         &repo_path,
     );
+    let upstream = capture(
+        "git",
+        &["rev-list", "HEAD", "-n1", "--author=bors"],
+        &repo_path,
+    );
+    let upstream_title = upstream
+        .as_deref()
+        .and_then(|upstream| capture("git", &["show", upstream, "-q", "--format=%s"], &repo_path));
+    let upstream_short = upstream
+        .as_deref()
+        .and_then(|upstream| capture("git", &["rev-parse", "--short", "-q", upstream], &repo_path));
+
+    let commit_title = capture("git", &["show", "HEAD", "-q", "--format=%s"], &repo_path);
     let commit = capture("git", &["rev-parse", "-q", "HEAD"], &repo_path);
     let commit_short = capture("git", &["rev-parse", "--short", "-q", "HEAD"], &repo_path);
 
@@ -247,6 +260,10 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
             branch,
             commit,
             commit_short,
+            commit_title,
+            upstream,
+            upstream_short,
+            upstream_title,
             size: build_size,
             signature,
             triple: TRIPLE.to_owned(),
