@@ -156,21 +156,29 @@ function build_details() {
                 linearize(keys[key], new_path, out)
             } else {
                 if (!BENIGN_OPTS.includes(new_path.join('.'))) {
-                    out.push([new_path, keys[key]]);
+                    out.push({ type: 'x.py', key: new_path.join('.'), value: JSON.stringify(keys[key]) });
                 }
             }
         }
     }
 
-    for (const build of DATA.builds) {
+    for (let i = 0; i < DATA.builds.length; i++) {
+        const build = DATA.builds[i];
         let out = [];
         linearize(build.config, [], out);
-        build.config_linearized = out;
+        const config = DATA.build_configs[i];
+        out = out.concat(config.rflags.map(f => { return { type: 'rustc', key: f }; }));
+        out = out.concat(config.cflags.map(f => { return { type: 'cargo', key: f }; }));
+        out = out.concat(config.envs.map(e => { return { type: 'env', key: e[0], value: e[1] }; }));
+        if (config.threads) {
+            out.push({ type: 'threads' });
+        }
+        build.bench_config = out;
     }
 
-    let common_opts = DATA.builds[0].config_linearized.filter(opt => {
+    let common_opts = DATA.builds[0].bench_config.filter(opt => {
         return DATA.builds.every(build => {
-            return build.config_linearized.find(build_opt => JSON.stringify(opt) == JSON.stringify(build_opt)) !== undefined
+            return build.bench_config.find(build_opt => JSON.stringify(opt) == JSON.stringify(build_opt)) !== undefined
         });
     });
 
@@ -180,10 +188,41 @@ function build_details() {
 
     let result = `<div class="build-container">`;
 
+    function render_opt(opt) {
+        let result = ``;
+        if (opt.type == 'x.py') {
+            result += `<div class="split"><p>${opt.key}:</p><p><b>${escapeHTML(opt.value)}</b></p></div>`;
+        }
+        if (opt.type == 'env') {
+            result += `<div class="split"><p><span class="bench-opt">env</span>${escapeHTML(opt.key)}:</p><p><b>${escapeHTML(opt.value)}</b></p></div>`;
+        }
+        if (opt.type == 'rustc') {
+            result += `<div class="split"><p><span class="bench-opt">rustc</span></p><p><b>${escapeHTML(opt.key)}</b></p></div>`;
+        }
+        if (opt.type == 'cargo') {
+            result += `<div class="split"><p><span class="bench-opt">cargo</span></p><p><b>${escapeHTML(opt.key)}</b></p></div>`;
+        }
+        if (opt.type == 'threads') {
+            result += `<p class="l">Multithreaded cargo</p>`;
+        }
+        return result;
+    }
+
     if (common_opts.length > 0) {
-        result += `<div class="build"><h3>Common build options</h3>`;
-        for (const opt of common_opts) {
-            result += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${escapeHTML(JSON.stringify(opt[1]))}</b></p></div>`;
+        result += `<div class="build">`;
+        let build_opts = common_opts.filter(opt => opt.type == 'x.py');
+        if (build_opts.length > 0) {
+            result += `<h3>Common build options</h3>`;
+            for (const opt of build_opts) {
+                result += render_opt(opt);
+            }
+        }
+        let bench_opts = common_opts.filter(opt => opt.type != 'x.py');
+        if (bench_opts.length > 0) {
+            result += `<h3>Common bench options</h3>`;
+            for (const opt of bench_opts) {
+                result += render_opt(opt);
+            }
         }
         result += `</div>`;
     }
@@ -196,20 +235,36 @@ function build_details() {
         result += `<div class="split"><p>Triple:</p><p><b>${build.triple}</b></p></div>`;
         result += `<div class="split"><p>From repo:</p><p><b>${build.repo}</b> at ${build.repo_path}</p></div>`;
 
-        let opts = build.config_linearized.filter(opt => common_opts.find(common_opt => JSON.stringify(opt) == JSON.stringify(common_opt)) === undefined);
+        let opts = build.bench_config.filter(opt => common_opts.find(common_opt => JSON.stringify(opt) == JSON.stringify(common_opt)) === undefined);
 
         if (opts.length > 0) {
-            if (DATA.builds.length > 1) {
-                result += `<div class="extra-opts"><h4>Additional build options:</h4>`;
-            } else {
-                result += `<div><h4>Build options:</h4>`;
+            let build_opts = opts.filter(opt => opt.type == 'x.py');
+            if (build_opts.length > 0) {
+                if (DATA.builds.length > 1) {
+                    result += `<div class="extra-opts"><h4>Additional build options:</h4>`;
+                } else {
+                    result += `<div><h4>Build options:</h4>`;
+                }
+
+                for (const opt of build_opts) {
+                    result += render_opt(opt);
+                }
+                result += `</div>`;
             }
 
-            for (const opt of opts) {
-                result += `<div class="split"><p>${opt[0].join(".")}:</p><p><b>${escapeHTML(JSON.stringify(opt[1]))}</b></p></div>`;
+            let bench_opts = opts.filter(opt => opt.type != 'x.py');
+            if (bench_opts.length > 0) {
+                if (DATA.builds.length > 1) {
+                    result += `<div class="extra-opts"><h4>Additional bench options:</h4>`;
+                } else {
+                    result += `<div><h4>Bench options:</h4>`;
+                }
 
+                for (const opt of bench_opts) {
+                    result += render_opt(opt);
+                }
+                result += `</div>`;
             }
-            result += `</div>`;
         }
 
         result += `</div>`;

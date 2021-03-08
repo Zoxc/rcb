@@ -136,6 +136,19 @@ a:hover .bench-incr {
     margin-top: 2em;*/
 }
 
+.bench-opt {
+    padding: 0.3em;
+    background: #d6d6d62c;
+    box-shadow: 0.1em 0.1em 1.7em rgba(0, 0, 0, 0.08);
+    border-radius: 5px;
+    border: 1px solid #dfdfdf8a;
+    margin-right: 0.3em;
+}
+
+.build p {
+    margin: 0.5em;
+}
+
 .build > h3 {
     padding: 0.2em;
     padding-bottom: 1.1em;
@@ -157,6 +170,10 @@ td {
 
 .r {
     text-align: right;
+}
+
+.l {
+    text-align: left;
 }
 
 th {
