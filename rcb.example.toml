@@ -1,0 +1,6 @@
+[repo.a]
+path = "/path/to/a"
+default = true
+
+[repo.b]
+path = "/path/to/b"

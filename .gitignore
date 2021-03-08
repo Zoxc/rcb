@@ -1,5 +1,6 @@
-/tool/target
+/target
 /.vscode
 /builds
 /tmp
 /reports
+/rcb.*
