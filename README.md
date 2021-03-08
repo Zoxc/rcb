@@ -5,8 +5,9 @@
 Build and copy the final binary to the repository root.
 
 ```sh
+cd tool
 cargo build --release
-cp target/release/rcb .
+cp target/release/rcb ..
 ```
 
 Create `rcb.toml` and edit it to let it know where your rustc repositories are.
