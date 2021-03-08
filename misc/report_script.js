@@ -232,19 +232,20 @@ function build_details() {
     for (let i = 0; i < DATA.builds.length; i++) {
         let build = DATA.builds[i];
         result += `<div class="build"><h3>Build <b>${build.name}</b></h3>`;
+        result += `<div class="split"><p>From repo:</p><p><b>${build.repo}</b> at ${build.repo_path}</p></div>`;
+
         result += `<div class="split"><p>Git commit title:</p><p><b>${build.commit_title}</b></p></div>`;
         result += `<div class="split"><p>Git commit:</p><p><b>${build.commit_short}</b></p></div>`;
-        result += `<div class="split"><p>Upstream commit:</p><p><b>${build.upstream_short}</b></p></div>`;
+        result += `<div class="split"><p>Git branch:</p><p><b>${build.branch}</b></p></div>`;
 
+        result += `<div class="split"><p>Upstream commit:</p><p><b>${build.upstream_short}</b></p></div>`;
         if (DATA.builds.length > 1) {
             if (!DATA.builds.find(b => b.commit == build.upstream)) {
                 result += `<p class="extra-opts">Not comparing against upstream commit</p>`;
             }
         }
 
-        result += `<div class="split"><p>Git branch:</p><p><b>${build.branch}</b></p></div>`;
         result += `<div class="split"><p>Triple:</p><p><b>${build.triple}</b></p></div>`;
-        result += `<div class="split"><p>From repo:</p><p><b>${build.repo}</b> at ${build.repo_path}</p></div>`;
 
         let opts = build.bench_config.filter(opt => common_opts.find(common_opt => JSON.stringify(opt) == JSON.stringify(common_opt)) === undefined);
 
