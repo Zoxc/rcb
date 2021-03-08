@@ -27,7 +27,7 @@ Once you have multiple builds you can compare them with the `bench` command:
 rcp bench <builds..>
 ```
 
-For example `rcb bench a~master~1 b~foo~1 --bench regex` would compare the `a~master~1` build versus the `b~foo~1` using the benchmark `regex`.
+For example `rcb bench a~master~1 b~foo~1 --bench regex --check` would compare the `a~master~1` build versus the `b~foo~1` using the benchmark `regex` with `cargo check`.
 
 Using the `bench` command will produce an HTML report in the `reports` folder in the repository root.
 

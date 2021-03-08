@@ -153,7 +153,7 @@ impl Instance {
         ))
     }
 
-    fn cargo(&self) -> Command {
+    fn cargo(&self, prepare: bool) -> Command {
         let mut output = Command::new("cargo");
         output
             .current_dir(&self.config.bench.cargo_dir)
@@ -195,7 +195,7 @@ impl Instance {
         rflags.extend_from_slice(&self.build.rflags);
         output.env("RUSTFLAGS", rflags.join(" "));
 
-        if !self.build.threads {
+        if !prepare && !self.build.threads {
             output.arg("-j1");
         }
         for cflag in &self.build.cflags {
@@ -213,7 +213,7 @@ impl Instance {
 
         t!(fs::create_dir_all(self.path()));
 
-        let mut output = self.cargo();
+        let mut output = self.cargo(true);
         //.arg("-vv");
 
         let output = t!(output.output());
@@ -259,7 +259,7 @@ impl Instance {
     fn run(&mut self, warmup: bool) {
         self.remove_fingerprint();
 
-        let mut output = self.cargo();
+        let mut output = self.cargo(false);
 
         let start = Instant::now();
         let output = t!(output.output());
