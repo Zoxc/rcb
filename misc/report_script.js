@@ -50,7 +50,7 @@ function format_size(bytes) {
     else if (bytes == 0) {
         return "0 bytes";
     }
-    throw "unable to convert bytes";
+    throw `unable to convert bytes ${JSON.stringify(bytes)}`;
 }
 
 function change(average, first, b) {
@@ -343,6 +343,36 @@ function summary() {
             return { name: `<a href="#${bench.name}">${format_bench(bench.name)}</a>`, columns: [times, rss] };
         })
     };
+
+    let times = DATA.benchs.map(bench => {
+        let first = average_by(bench.builds[0].time);
+        let times = bench.builds.map(build => average_by(build.time) / first);
+
+        let first_rss = average_by(bench.builds[0].times, time => max_rss(time) * 1024 * 1024);
+        let rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024) / first_rss);
+        return { time: times, rss: rss };
+    });
+
+    console.log("ratios", times);
+
+    let times_r = times.reduce((sum, v) => {
+        console.log(sum);
+        return sum.map((sum, i) => {
+            return { time: sum.time + v.time[i], rss: sum.rss + v.rss[i] };
+        });
+    }, DATA.benchs[0].builds.map(bench => { return { time: 0, rss: 0 }; }));
+
+    console.log("times_r", times_r);
+
+    let times_a = times_r.map(build => {
+        return { time: build.time / DATA.benchs.length, rss: build.rss / DATA.benchs.length };
+    });
+
+    console.log("times_a", times_a);
+
+    summary.rows.push({
+        name: `Summary`, columns: [times_a.map(build => build.time), times_a.map(build => build.rss * 1024 * 1024)]
+    });
 
     return `<div><h3>Benchmark summary</h3>${diff_table(summary)}</div>`;
 }
