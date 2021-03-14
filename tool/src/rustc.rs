@@ -1,4 +1,6 @@
 use std::{env, process::Command, time::Instant};
+#[cfg(windows)]
+use {std::os::windows::process::CommandExt, winapi::um::winbase::HIGH_PRIORITY_CLASS};
 
 pub fn run() -> ! {
     let arguments: Vec<_> = env::args_os().collect();
@@ -6,6 +8,10 @@ pub fn run() -> ! {
     for argument in &arguments[2..] {
         output.arg(argument);
     }
+
+    #[cfg(windows)]
+    output.creation_flags(HIGH_PRIORITY_CLASS);
+
     let start = Instant::now();
 
     let status = output.status().expect("failed to execute the real rustc");

@@ -366,6 +366,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "toml",
+ "winapi",
 ]
 
 [[package]]
