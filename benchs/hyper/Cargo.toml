@@ -20,7 +20,7 @@ include = [
 ]
 
 [lib]
-crate-type = ["lib", "staticlib", "cdylib"]
+crate-type = ["lib"]
 
 [dependencies]
 bytes = "1"
