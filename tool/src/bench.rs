@@ -39,6 +39,7 @@ struct Bench {
 
 #[derive(Clone)]
 struct Config {
+    details: bool,
     incremental: IncrementalMode,
     mode: BenchMode,
     bench: Arc<Bench>,
@@ -118,7 +119,7 @@ struct TimeData {
 struct ResultConfig {
     build: String,
     time: Vec<f64>,
-    times: Vec<Vec<TimeData>>,
+    times: Option<Vec<Vec<TimeData>>>,
 }
 
 #[derive(Serialize)]
@@ -203,7 +204,11 @@ impl Instance {
             }
         }
 
-        let mut rflags = vec!["-Ztime".to_owned()];
+        let mut rflags = if self.config.details {
+            vec!["-Ztime".to_owned()]
+        } else {
+            Vec::new()
+        };
         rflags.extend_from_slice(&self.build.rflags);
         output.env("RUSTFLAGS", rflags.join(" "));
 
@@ -304,55 +309,58 @@ impl Instance {
         }
 
         if !warmup {
-            let stderr = t!(std::str::from_utf8(&output.stderr));
-
-            let mut times: Vec<TimeData> = stderr
-                .trim()
-                .lines()
-                .filter_map(|line| {
-                    let line = line.trim();
-                    if line.starts_with("time:") {
-                        let parts: Vec<&str> = line.split_ascii_whitespace().collect();
-                        let name = parts.last().unwrap().to_string();
-                        Some(TimeData {
-                            name,
-                            before_rss: parts[3].to_string(),
-                            after_rss: parts[5].to_string(),
-                            time: str::parse(parts[1].trim_end_matches(";")).unwrap(),
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            let totals: Vec<_> = times
-                .iter()
-                .enumerate()
-                .filter(|(_, time)| time.name == "total")
-                .collect();
-
-            if totals.len() > 1 {
-                let split_at = totals[totals.len() - 2].0 + 1;
-                times = times.split_off(split_at);
-            }
-
-            let mut seen = HashSet::new();
-
-            for time in &times {
-                if !seen.insert(time.name.clone()) {
-                    panic!(
-                        "Duplicate -Z time entry for `{}` in {}",
-                        time.name,
-                        self.display()
-                    );
-                }
-            }
-
             println!("Ran {} in {:?}", self.display(), duration);
 
             self.time.push(duration.as_secs_f64());
-            self.times.push(times);
+
+            if self.config.details {
+                let stderr = t!(std::str::from_utf8(&output.stderr));
+
+                let mut times: Vec<TimeData> = stderr
+                    .trim()
+                    .lines()
+                    .filter_map(|line| {
+                        let line = line.trim();
+                        if line.starts_with("time:") {
+                            let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+                            let name = parts.last().unwrap().to_string();
+                            Some(TimeData {
+                                name,
+                                before_rss: parts[3].to_string(),
+                                after_rss: parts[5].to_string(),
+                                time: str::parse(parts[1].trim_end_matches(";")).unwrap(),
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let totals: Vec<_> = times
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, time)| time.name == "total")
+                    .collect();
+
+                if totals.len() > 1 {
+                    let split_at = totals[totals.len() - 2].0 + 1;
+                    times = times.split_off(split_at);
+                }
+
+                let mut seen = HashSet::new();
+
+                for time in &times {
+                    if !seen.insert(time.name.clone()) {
+                        panic!(
+                            "Duplicate -Z time entry for `{}` in {}",
+                            time.name,
+                            self.display()
+                        );
+                    }
+                }
+
+                self.times.push(times);
+            }
         }
     }
 
@@ -364,7 +372,11 @@ impl Instance {
         ResultConfig {
             build: self.build.name.clone(),
             time: self.time.clone(),
-            times: self.times.clone(),
+            times: if self.config.details {
+                Some(self.times.clone())
+            } else {
+                None
+            },
         }
     }
 }
@@ -453,6 +465,15 @@ fn build_configs(matches: &ArgMatches, builds: &[Build]) -> Vec<Arc<BuildConfig>
 
 pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let start = Instant::now();
+
+    let details = matches
+        .value_of("details")
+        .map(|v| match v {
+            "none" => false,
+            "time" => true,
+            _ => panic!("Unknown details value `{}`", v),
+        })
+        .unwrap_or(true);
 
     let iterations =
         value_t!(matches, "iterations", usize).unwrap_or(state.config.iterations.unwrap_or(8));
@@ -587,6 +608,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
             modes.iter().flat_map(move |&mode| {
                 let bench = bench.clone();
                 incr_modes.iter().map(move |&incremental| Config {
+                    details,
                     incremental,
                     mode,
                     bench: bench.clone(),

@@ -1,5 +1,7 @@
 console.log("Report JSON", DATA);
 
+const DETAILS = DATA.benchs[0].builds[0].times !== null;
+
 function format_bench(name) {
     let parts = name.split(":");
 
@@ -336,24 +338,34 @@ function diff_table(data) {
 function summary() {
     let summary = {
         type: 'Benchmark',
-        columns: [{ name: 'Time', format: format_time }, { name: 'Memory', format: format_size }],
+        columns: [{ name: 'Time', format: format_time }],
         rows: DATA.benchs.map(bench => {
             let times = bench.builds.map(build => average_by(build.time));
-            let rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024));
-            return { name: `<a href="#${bench.name}">${format_bench(bench.name)}</a>`, columns: [times, rss] };
+            let rss;
+            if (DETAILS) {
+                rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024))
+            };
+            return { name: `<a href="#${bench.name}">${format_bench(bench.name)}</a>`, columns: DETAILS ? [times, rss] : [times] };
         })
     };
+
+    if (DETAILS) {
+        summary.columns.push({ name: 'Memory', format: format_size });
+    }
 
     let times = DATA.benchs.map(bench => {
         let first = average_by(bench.builds[0].time);
         let times = bench.builds.map(build => average_by(build.time) / first);
 
-        let first_rss = average_by(bench.builds[0].times, time => max_rss(time) * 1024 * 1024);
-        let rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024) / first_rss);
+        let rss;
+        if (DETAILS) {
+            let first_rss = average_by(bench.builds[0].times, time => max_rss(time) * 1024 * 1024);
+            rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024) / first_rss);
+        } else {
+            rss = bench.builds.map(build => 0);
+        }
         return { time: times, rss: rss };
     });
-
-    console.log("ratios", times);
 
     let times_r = times.reduce((sum, v) => {
         console.log(sum);
@@ -362,18 +374,19 @@ function summary() {
         });
     }, DATA.benchs[0].builds.map(bench => { return { time: 0, rss: 0 }; }));
 
-    console.log("times_r", times_r);
-
     let times_a = times_r.map(build => {
         return { time: build.time / DATA.benchs.length, rss: build.rss / DATA.benchs.length };
     });
 
-    console.log("times_a", times_a);
-
-    summary.rows.push({
-        name: `Summary`, columns: [times_a.map(build => build.time), times_a.map(build => build.rss * 1024 * 1024)]
-    });
-
+    if (DETAILS) {
+        summary.rows.push({
+            name: `Summary`, columns: [times_a.map(build => build.time), times_a.map(build => build.rss * 1024 * 1024)]
+        });
+    } else {
+        summary.rows.push({
+            name: `Summary`, columns: [times_a.map(build => build.time)]
+        });
+    }
     return `<div><h3>Benchmark summary</h3>${diff_table(summary)}</div>`;
 }
 
@@ -463,8 +476,10 @@ content += `</div>`;
 content += build_details();
 content += `<div class="flex">`;
 content += file_sizes;
-for (const bench of DATA.benchs) {
-    content += bench_detail(bench);
+if (DETAILS) {
+    for (const bench of DATA.benchs) {
+        content += bench_detail(bench);
+    }
 }
 content += `</div>`;
 content += `</div>`;
