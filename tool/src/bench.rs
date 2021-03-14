@@ -79,19 +79,31 @@ impl BenchMode {
     }
 }
 
-pub fn remove_fingerprint(path: &Path, krate: &str) {
-    for f in t!(fs::read_dir(path)) {
-        let f = t!(f);
-        let path = f.path();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        if let Some(i) = name.as_bytes().iter().rposition(|c| *c == '-' as u8) {
-            if &name[0..i] == krate {
-                crate::remove_recursively(&path);
-                return;
+fn crate_matches(path: &Path, krate: &str) -> Vec<(String, PathBuf)> {
+    t!(fs::read_dir(path))
+        .filter_map(|f| {
+            let f = t!(f);
+            let path = f.path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if let Some(i) = name.as_bytes().iter().rposition(|c| *c == '-' as u8) {
+                if &name[0..i] == krate {
+                    return Some((name, path));
+                }
             }
-        }
+            None
+        })
+        .collect()
+}
+
+fn remove_fingerprint(mut fingerprints: Vec<(String, PathBuf)>, krate: &str) {
+    if fingerprints.len() != 1 {
+        panic!(
+            "Didn't find exactly one fingerprint for {}, found {:#?}",
+            krate, fingerprints
+        );
     }
-    panic!("Didn't find fingerprint for {}", krate);
+
+    crate::remove_recursively(&fingerprints.pop().unwrap().1);
 }
 
 #[derive(Serialize, Clone)]
@@ -246,13 +258,26 @@ impl Instance {
             BenchMode::Release => "release",
         });
 
-        remove_fingerprint(
-            &target_profile.join(".fingerprint"),
-            &self.config.bench.name,
-        );
+        let krate = &self.config.bench.name;
+
+        let build_scripts = crate_matches(&target_profile.join("build"), krate);
+
+        let mut fingerprints = crate_matches(&target_profile.join(".fingerprint"), krate);
+
+        // Remove build scripts which can share the name of the main crate
+        fingerprints.retain(|(name, _)| {
+            build_scripts
+                .iter()
+                .find(|(build, _)| name == build)
+                .is_none()
+        });
+
+        remove_fingerprint(fingerprints, krate);
 
         if self.config.incremental == IncrementalMode::Initial {
-            remove_fingerprint(&target_profile.join("incremental"), &self.config.bench.name);
+            let incremental = crate_matches(&target_profile.join("incremental"), krate);
+
+            remove_fingerprint(incremental, krate);
         }
     }
 
