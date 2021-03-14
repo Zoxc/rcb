@@ -7,13 +7,13 @@ use core::panic;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use serde_derive::{Deserialize, Serialize};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::Write,
     path::Path,
     path::PathBuf,
     process::{Command, Stdio},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -488,6 +488,59 @@ fn build_configs(matches: &ArgMatches, builds: &[Build]) -> Vec<Arc<BuildConfig>
         .collect()
 }
 
+fn run_benchs(
+    state: &State,
+    configs: &mut Vec<ConfigInstances>,
+    iterations: usize,
+    matches: &ArgMatches,
+) {
+    let threads = std::cmp::max(value_t!(matches, "jobs", usize).unwrap_or(1), 1);
+
+    if threads == 1 {
+        for config in configs {
+            run_bench(config, iterations);
+        }
+    } else {
+        let costs = state.root.join("benchs").join("cost.toml");
+        let costs = t!(fs::read_to_string(costs));
+        let costs: HashMap<String, f64> = t!(toml::from_str(&costs));
+        let mut configs: Vec<_> = configs
+            .iter_mut()
+            .map(|config| {
+                let cost = *costs.get(&config.config.display()).unwrap_or(&1.0);
+                (config, cost)
+            })
+            .collect();
+        configs.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let configs = Mutex::new(configs);
+
+        rayon::scope(|scope| {
+            for _ in 0..threads {
+                scope.spawn(|_| loop {
+                    let config = configs.lock().unwrap().pop();
+
+                    if let Some((config, cost)) = config {
+                        run_bench(config, iterations);
+                    } else {
+                        break;
+                    }
+                })
+            }
+        });
+    }
+}
+
+fn run_bench(config: &mut ConfigInstances, iterations: usize) {
+    for instance in &mut *config.builds {
+        instance.run(true);
+    }
+    for _ in 0..iterations {
+        for instance in &mut *config.builds {
+            instance.run(false);
+        }
+    }
+}
+
 pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let start = Instant::now();
 
@@ -697,18 +750,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         );
     }
 
-    for config in &mut configs {
-        // Warm up run
-        for instance in &mut *config.builds {
-            instance.run(true);
-        }
-
-        for _ in 0..iterations {
-            for instance in &mut *config.builds {
-                instance.run(false);
-            }
-        }
-    }
+    run_benchs(&state, &mut configs, iterations, matches);
 
     {
         let mut table = ascii_table::AsciiTable::default();

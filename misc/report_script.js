@@ -335,6 +335,23 @@ function diff_table(data) {
     return result;
 }
 
+function export_bench_times() {
+    let benchs = Object.fromEntries(DATA.benchs.map(bench => {
+        let times = bench.builds.flatMap(build => build.time);
+        return [bench.name, average_by(times)];
+    }));
+    console.log(benchs);
+    let base = average_by(['syntex_syntax:check', 'regex:check', 'hyper:check'].map(b => benchs[b]));
+    let result = "";
+    for (let bench in benchs) {
+        console.log(bench, benchs[bench], base);
+        result += `${JSON.stringify(bench)} = ${JSON.stringify(benchs[bench] / base)}\n`;
+    }
+    copy(result);
+    console.log(result);
+    return "Copied to clipboard";
+}
+
 function summary() {
     let summary = {
         type: 'Benchmark',
@@ -369,7 +386,6 @@ function summary() {
     });
 
     let times_r = times.reduce((sum, v) => {
-        console.log(sum);
         return sum.map((sum, i) => {
             return { time: sum.time + v.time[i], rss: sum.rss + v.rss[i] };
         });

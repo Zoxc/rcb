@@ -1,3 +1,5 @@
+#![feature(total_cmp)]
+
 use clap::SubCommand;
 use clap::{App, AppSettings, Arg};
 use rand::distributions::Alphanumeric;
@@ -189,6 +191,12 @@ fn main() {
                 .long("threads")
                 .takes_value(true)
                 .help("Don't pass -j1 to cargo"),
+        )
+        .arg(
+            Arg::with_name("jobs")
+                .short("j")
+                .takes_value(true)
+                .help("Number of threads to benchmark on"),
         )
         .arg(
             Arg::with_name("rflag")
