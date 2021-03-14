@@ -345,7 +345,8 @@ function summary() {
             if (DETAILS) {
                 rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024))
             };
-            return { name: `<a href="#${bench.name}">${format_bench(bench.name)}</a>`, columns: DETAILS ? [times, rss] : [times] };
+            let name = DETAILS ? `<a href="#${bench.name}">${format_bench(bench.name)}</a>` : format_bench(bench.name);
+            return { name: name, columns: DETAILS ? [times, rss] : [times] };
         })
     };
 
