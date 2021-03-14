@@ -226,8 +226,6 @@ impl Instance {
     }
 
     fn prepare(&mut self) {
-        println!("Preparing {}", self.display(),);
-
         t!(fs::create_dir_all(self.path()));
 
         let mut output = self.cargo(true);
@@ -253,8 +251,6 @@ impl Instance {
         if self.config.incremental == IncrementalMode::Unchanged {
             self.run(true);
         }
-
-        println!("Prepared {}", self.display());
     }
 
     fn remove_fingerprint(&self) {
@@ -653,11 +649,24 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         })
         .collect();
 
-    configs.par_iter_mut().for_each(|config| {
-        config.builds.par_iter_mut().for_each(|instance| {
-            instance.prepare();
+    {
+        let start = Instant::now();
+
+        configs.par_iter_mut().for_each(|config| {
+            config.builds.par_iter_mut().for_each(|instance| {
+                instance.prepare();
+            });
         });
-    });
+        let duration = start.elapsed();
+        let seconds = duration.as_secs() % 60;
+        let minutes = (duration.as_secs() / 60) % 60;
+        let hours = minutes / 60;
+
+        println!(
+            "Prepared benchmarks in {:02}:{:02}:{:02}",
+            hours, minutes, seconds
+        );
+    }
 
     for config in &mut configs {
         // Warm up run
@@ -786,5 +795,5 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let minutes = (duration.as_secs() / 60) % 60;
     let hours = minutes / 60;
 
-    println!("Completed in {}:{}:{}", hours, minutes, seconds);
+    println!("Completed in {:02}:{:02}:{:02}", hours, minutes, seconds);
 }
