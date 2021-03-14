@@ -14,7 +14,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 #[derive(Serialize, Default)]
@@ -191,6 +191,12 @@ impl Instance {
             )
             .env("CARGO_TARGET_DIR", self.path());
 
+        if !prepare {
+            output
+                .env("RUSTC_WRAPPER", &self.state.exe)
+                .env("RCB_ACT_AS_RUSTC", "1");
+        }
+
         match self.config.mode {
             BenchMode::Check => {
                 output.arg("check");
@@ -287,9 +293,7 @@ impl Instance {
 
         let mut output = self.cargo(false);
 
-        let start = Instant::now();
         let output = t!(output.output());
-        let duration = start.elapsed();
 
         if !output.status.success() {
             let stderr = t!(std::str::from_utf8(&output.stderr));
@@ -305,13 +309,38 @@ impl Instance {
         }
 
         if !warmup {
-            println!("Ran {} in {:?}", self.display(), duration);
+            let stderr = t!(std::str::from_utf8(&output.stderr));
 
-            self.time.push(duration.as_secs_f64());
+            let mut time: Vec<_> = stderr
+                .trim()
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim();
+                    if line.starts_with("rcb-rustc-timer:") {
+                        let parts: Vec<&str> = line.split(":").collect();
+                        let time = parts.last().unwrap();
+                        let time = Duration::from_micros(str::parse(time).unwrap());
+                        Some(time.as_secs_f64())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if time.len() != 1 {
+                panic!(
+                    "Multiple time results for {}\nSTDERR:{}",
+                    self.display(),
+                    stderr
+                );
+            }
+            let time = time.pop().unwrap();
+
+            println!("Ran {} in {:.04}s", self.display(), time);
+
+            self.time.push(time);
 
             if self.config.details {
-                let stderr = t!(std::str::from_utf8(&output.stderr));
-
                 let mut times: Vec<TimeData> = stderr
                     .trim()
                     .lines()

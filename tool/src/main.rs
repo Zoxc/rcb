@@ -52,6 +52,7 @@ macro_rules! t {
 
 mod bench;
 mod fetch;
+mod rustc;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct BuildFile {
@@ -94,6 +95,7 @@ struct Config {
 
 #[derive(Debug)]
 pub struct State {
+    exe: PathBuf,
     root: PathBuf,
     config: Config,
     verbose: bool,
@@ -166,6 +168,10 @@ fn temp_dir(parent: &Path) -> PathBuf {
 }
 
 fn main() {
+    if std::env::var_os("RCB_ACT_AS_RUSTC").is_some() {
+        rustc::run();
+    }
+
     let fetch = SubCommand::with_name("fetch")
         .arg(Arg::with_name("ref").long("ref"))
         .arg(Arg::with_name("REPO"));
@@ -217,8 +223,8 @@ fn main() {
         .subcommand(bench)
         .get_matches();
 
-    let exe_path = std::env::current_exe().unwrap();
-    let exe_path = exe_path.parent().unwrap();
+    let exe = std::env::current_exe().unwrap();
+    let exe_path = exe.parent().unwrap();
     let config_path = exe_path.join("rcb.toml");
 
     let config: Config = match std::fs::read_to_string(&config_path) {
@@ -246,6 +252,7 @@ fn main() {
     println!("Root is {}", root.display());
 
     let state = Arc::new(State {
+        exe,
         root,
         config,
         verbose: false,
