@@ -14,6 +14,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     sync::{Arc, Mutex},
+    thread::sleep,
     time::{Duration, Instant},
 };
 
@@ -498,7 +499,7 @@ fn run_benchs(
 
     if threads == 1 {
         for config in configs {
-            run_bench(config, iterations);
+            run_bench(config, iterations, 0, None);
         }
     } else {
         let costs = state.root.join("benchs").join("cost.toml");
@@ -514,13 +515,18 @@ fn run_benchs(
         configs.sort_by(|a, b| a.1.total_cmp(&b.1));
         let configs = Mutex::new(configs);
 
+        let last_event: Mutex<Vec<_>> = Mutex::new((0..threads).map(|_| Instant::now()).collect());
+
         rayon::scope(|scope| {
-            for _ in 0..threads {
-                scope.spawn(|_| loop {
+            for i in 0..threads {
+                let configs = &configs;
+                let last_event = &last_event;
+                scope.spawn(move |_| loop {
+                    let i = i;
                     let config = configs.lock().unwrap().pop();
 
-                    if let Some((config, cost)) = config {
-                        run_bench(config, iterations);
+                    if let Some((config, _)) = config {
+                        run_bench(config, iterations, i, Some(&last_event));
                     } else {
                         break;
                     }
@@ -530,13 +536,52 @@ fn run_benchs(
     }
 }
 
-fn run_bench(config: &mut ConfigInstances, iterations: usize) {
+fn set_event(thread: usize, last_event: Option<&Mutex<Vec<Instant>>>) {
+    last_event.map(|last_event| last_event.lock().unwrap()[thread] = Instant::now());
+}
+
+fn wait_event(thread: usize, last_event: Option<&Mutex<Vec<Instant>>>) {
+    let last_event = if let Some(last_event) = last_event {
+        last_event
+    } else {
+        return;
+    };
+
+    loop {
+        {
+            let now = Instant::now();
+            let mut events = last_event.lock().unwrap();
+            if events
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| i != thread)
+                .all(|(_, &time)| now.saturating_duration_since(time).as_millis() > 500)
+            {
+                events[thread] = Instant::now();
+                return;
+            }
+        }
+        sleep(Duration::from_millis(50));
+    }
+}
+
+fn run_bench(
+    config: &mut ConfigInstances,
+    iterations: usize,
+    thread: usize,
+    last_event: Option<&Mutex<Vec<Instant>>>,
+) {
     for instance in &mut *config.builds {
+        wait_event(thread, last_event);
         instance.run(true);
+        set_event(thread, last_event);
     }
     for _ in 0..iterations {
         for instance in &mut *config.builds {
+            sleep(Duration::from_millis(200));
+            wait_event(thread, last_event);
             instance.run(false);
+            set_event(thread, last_event);
         }
     }
 }
