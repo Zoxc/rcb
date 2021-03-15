@@ -371,6 +371,34 @@ function summary() {
         summary.columns.push({ name: 'Memory', format: format_size });
     }
 
+    let total = DATA.benchs.map(bench => {
+        let times = bench.builds.map(build => average_by(build.time));
+
+        let rss;
+        if (DETAILS) {
+            rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024));
+        } else {
+            rss = bench.builds.map(build => 0);
+        }
+        return { time: times, rss: rss };
+    });
+
+    let total_r = total.reduce((sum, v) => {
+        return sum.map((sum, i) => {
+            return { time: sum.time + v.time[i], rss: sum.rss + v.rss[i] };
+        });
+    }, DATA.benchs[0].builds.map(bench => { return { time: 0, rss: 0 }; }));
+
+    if (DETAILS) {
+        summary.rows.push({
+            name: `Total`, columns: [total_r.map(build => build.time), total_r.map(build => build.rss)]
+        });
+    } else {
+        summary.rows.push({
+            name: `Total`, columns: [total_r.map(build => build.time)]
+        });
+    }
+
     let times = DATA.benchs.map(bench => {
         let first = average_by(bench.builds[0].time);
         let times = bench.builds.map(build => average_by(build.time) / first);
@@ -404,6 +432,7 @@ function summary() {
             name: `Summary`, columns: [times_a.map(build => build.time)]
         });
     }
+
     return `<div><h3>Benchmark summary</h3>${diff_table(summary)}</div>`;
 }
 
