@@ -1,3 +1,5 @@
+use crate::term;
+use crate::term::View;
 use crate::Build;
 use crate::OnDrop;
 use crate::State;
@@ -777,13 +779,37 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         .collect();
 
     {
+        let total: usize = configs.iter().map(|config| config.builds.len()).sum();
+        let view = Mutex::new((View::new(), 0));
+
+        let print = || {
+            let mut lock = view.lock().unwrap();
+            lock.0.rewind();
+            view!(
+                &mut lock.0,
+                term::progress_bar(
+                    &format!("Preparing benchmarks {}/{}: ", lock.1, total),
+                    lock.1,
+                    total
+                )
+            );
+            lock.0.flush();
+        };
+
+        print();
+
         let start = Instant::now();
 
         configs.par_iter_mut().for_each(|config| {
             config.builds.par_iter_mut().for_each(|instance| {
                 instance.prepare();
+                view.lock().unwrap().1 += 1;
+                print();
             });
         });
+
+        view.into_inner().unwrap().0.rewind();
+
         let duration = start.elapsed();
         let seconds = duration.as_secs() % 60;
         let minutes = (duration.as_secs() / 60) % 60;

@@ -52,6 +52,8 @@ macro_rules! t {
     };
 }
 
+#[macro_use]
+mod term;
 mod bench;
 mod fetch;
 mod rustc;
