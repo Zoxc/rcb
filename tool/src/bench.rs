@@ -1,5 +1,7 @@
+use crate::bench::display::Display;
 use crate::term;
 use crate::term::View;
+use crate::term::Viewable;
 use crate::Build;
 use crate::OnDrop;
 use crate::State;
@@ -19,6 +21,8 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
+
+mod display;
 
 #[derive(Serialize, Default)]
 struct BuildConfig {
@@ -49,6 +53,55 @@ struct Config {
 }
 
 impl Config {
+    fn view(&self, view: &mut View) {
+        view!(
+            view,
+            term::default_color(),
+            //term::bold(),
+            self.bench.name,
+            term::default_color()
+        );
+        ":".view(view);
+        match self.mode {
+            BenchMode::Check => view!(
+                view,
+                term::color(137, 114, 186),
+                "check",
+                term::default_color()
+            ),
+            BenchMode::Debug => view!(
+                view,
+                term::color(204, 174, 75),
+                "debug",
+                term::default_color()
+            ),
+            BenchMode::Release => view!(
+                view,
+                term::color(102, 166, 209),
+                "release",
+                term::default_color()
+            ),
+        }
+
+        match self.incremental {
+            IncrementalMode::Initial => view!(
+                view,
+                ":",
+                term::color(132, 143, 99),
+                "initial",
+                term::default_color()
+            ),
+            IncrementalMode::Unchanged => view!(
+                view,
+                ":",
+                term::color(132, 143, 99),
+                "unchanged",
+                term::default_color()
+            ),
+            IncrementalMode::None => (),
+        }
+    }
+
     fn display(&self) -> String {
         let start = format!("{}:{}", self.bench.name, self.mode.display());
         match self.incremental {
@@ -139,6 +192,8 @@ struct Result {
 }
 
 struct Instance {
+    config_index: usize,
+    build_index: usize,
     session_dir: PathBuf,
     state: Arc<State>,
     build: Arc<BuildConfig>,
@@ -147,7 +202,8 @@ struct Instance {
     times: Vec<Vec<TimeData>>,
 }
 
-struct ConfigInstances {
+pub(crate) struct ConfigInstances {
+    config_index: usize,
     config: Config,
     builds: Vec<Instance>,
 }
@@ -258,7 +314,7 @@ impl Instance {
         // Run an extra time to remove cached queries that can't follow from one unchanged
         // session to the next
         if self.config.incremental == IncrementalMode::Unchanged {
-            self.run(true);
+            self.run(true, None);
         }
     }
 
@@ -291,7 +347,7 @@ impl Instance {
         }
     }
 
-    fn run(&mut self, warmup: bool) {
+    fn run(&mut self, warmup: bool, display: Option<&Mutex<Display>>) {
         self.remove_fingerprint();
 
         let mut output = self.cargo(false);
@@ -339,7 +395,14 @@ impl Instance {
             }
             let time = time.pop().unwrap();
 
-            println!("Ran {} in {:.04}s", self.display(), time);
+            display.map(|display| {
+                display
+                    .lock()
+                    .unwrap()
+                    .report(self.config_index, self.build_index, time)
+            });
+
+            //println!("Ran {} in {:.04}s", self.display(), time);
 
             self.time.push(time);
 
@@ -390,10 +453,6 @@ impl Instance {
                 self.times.push(times);
             }
         }
-    }
-
-    fn summary_time(&self) -> f64 {
-        self.time.iter().map(|t| *t).sum::<f64>() / self.time.len() as f64
     }
 
     fn result(&self) -> ResultConfig {
@@ -496,12 +555,13 @@ fn run_benchs(
     configs: &mut Vec<ConfigInstances>,
     iterations: usize,
     matches: &ArgMatches,
+    display: Arc<Mutex<Display>>,
 ) {
     let threads = std::cmp::max(value_t!(matches, "jobs", usize).unwrap_or(1), 1);
 
     if threads == 1 {
         for config in configs {
-            run_bench(config, iterations, 0, None);
+            run_bench(config, iterations, 0, None, &display);
         }
     } else {
         let costs = state.root.join("benchs").join("cost.toml");
@@ -523,12 +583,13 @@ fn run_benchs(
             for i in 0..threads {
                 let configs = &configs;
                 let last_event = &last_event;
+                let display = display.clone();
                 scope.spawn(move |_| loop {
                     let i = i;
                     let config = configs.lock().unwrap().pop();
 
                     if let Some((config, _)) = config {
-                        run_bench(config, iterations, i, Some(&last_event));
+                        run_bench(config, iterations, i, Some(&last_event), &display);
                     } else {
                         break;
                     }
@@ -572,17 +633,20 @@ fn run_bench(
     iterations: usize,
     thread: usize,
     last_event: Option<&Mutex<Vec<Instant>>>,
+    display: &Mutex<Display>,
 ) {
+    display.lock().unwrap().start_config(config.config_index);
+
     for instance in &mut *config.builds {
         wait_event(thread, last_event);
-        instance.run(true);
+        instance.run(true, Some(display));
         set_event(thread, last_event);
     }
     for _ in 0..iterations {
         for instance in &mut *config.builds {
             sleep(Duration::from_millis(200));
             wait_event(thread, last_event);
-            instance.run(false);
+            instance.run(false, Some(display));
             set_event(thread, last_event);
         }
     }
@@ -762,11 +826,16 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
 
     let mut configs: Vec<ConfigInstances> = bench_configs
         .iter()
-        .map(|config| ConfigInstances {
+        .enumerate()
+        .map(|(config_index, config)| ConfigInstances {
+            config_index,
             config: config.clone(),
             builds: build_configs
                 .iter()
-                .map(|build| Instance {
+                .enumerate()
+                .map(|(build_index, build)| Instance {
+                    config_index,
+                    build_index,
                     time: Vec::new(),
                     times: Vec::new(),
                     session_dir: session_dir.clone(),
@@ -821,46 +890,12 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         );
     }
 
-    run_benchs(&state, &mut configs, iterations, matches);
-
     {
-        let mut table = ascii_table::AsciiTable::default();
+        let display = Arc::new(Mutex::new(Display::new(&configs, iterations)));
 
-        let mut column = ascii_table::Column::default();
-        column.header = "Benchmark".into();
-        table.columns.insert(0, column);
+        display.lock().unwrap().refresh();
 
-        for (i, build) in builds.iter().enumerate() {
-            let mut column = ascii_table::Column::default();
-            column.header = build.name.clone();
-            table.columns.insert(1 + i, column);
-        }
-
-        let rows: Vec<_> = configs
-            .iter()
-            .map(|config| {
-                let first = config.builds.first().unwrap().summary_time();
-                let mut row: Vec<String> = config
-                    .builds
-                    .iter()
-                    .enumerate()
-                    .map(|(i, build)| {
-                        let time = build.summary_time();
-                        let change = (time / first) - 1.0;
-                        let change = if i > 0 {
-                            format!(" : {:+.02}%", change * 100.0)
-                        } else {
-                            String::new()
-                        };
-                        format!("{:.06} {}", build.summary_time(), change)
-                    })
-                    .collect();
-                row.insert(0, config.config.display());
-                row
-            })
-            .collect();
-
-        table.print(rows);
+        run_benchs(&state, &mut configs, iterations, matches, display);
     }
 
     let build_names = builds

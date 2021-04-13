@@ -1,8 +1,11 @@
 use std::io::{stderr, Write};
-use winapi::um::consoleapi::{GetConsoleMode, SetConsoleMode};
-use winapi::um::processenv::GetStdHandle;
-use winapi::um::winbase::STD_ERROR_HANDLE;
-use winapi::um::wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+#[cfg(windows)]
+use winapi::um::{
+    consoleapi::{GetConsoleMode, SetConsoleMode},
+    processenv::GetStdHandle,
+    winbase::STD_ERROR_HANDLE,
+    wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+};
 
 pub struct View {
     width: usize,
@@ -27,6 +30,10 @@ impl View {
             line: 0,
             buffer: String::new(),
         }
+    }
+
+    pub fn col(&self) -> usize {
+        self.line
     }
 
     pub fn width(&self) -> usize {
@@ -58,22 +65,12 @@ impl View {
     }
 
     pub fn rewind(&mut self) {
-        let empty = |len| (0..len).map(|_| ' ').collect::<String>();
         self.lines.push(self.line);
-        for (i, &line) in self.lines.iter().enumerate().rev() {
-            //self.buffer.push_str(&format!("\x1b[{}K", line));
-            //self.buffer.push_str("\x1b[1M");
+        for (i, _) in self.lines.iter().enumerate().rev() {
             self.buffer.push_str("\x1b[0K");
             if i != 0 {
                 self.buffer.push_str("\x1b[1A");
             }
-            /*self.buffer.push_str(&format!("\x1b[{}P", line));
-            self.buffer.push_str("\x1b[3P");
-            self.buffer.push_str(&empty(line));
-            self.buffer.push_str(&format!("\x1b[{}d", line));
-            if i != 0 {
-            self.buffer.push_str("\x1b[1f");
-            }*/
         }
         self.reset();
     }
