@@ -171,7 +171,7 @@ impl Display {
             .map(|build| {
                 self.configs
                     .iter()
-                    .map(|config| config.builds[build].time_total)
+                    .map(|config| config.builds[build].avg().unwrap())
                     .sum::<f64>()
             })
             .collect();
