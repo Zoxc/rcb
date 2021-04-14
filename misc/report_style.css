@@ -83,6 +83,16 @@ a:hover .bench-incr {
     color: rgb(135, 161, 126);
 }
 
+.file-hex {
+    padding: 0.2em;
+    margin: 0.1em;
+    color: #00000077;
+    background: #898d7f07;
+    box-shadow: 0.1em 0.1em 0.4em rgba(0, 0, 0, 0.025);
+    border-radius: 5px;
+    border: 1px solid #4e4b4b1f;
+}
+
 .extra-opts {
     padding: 1em;
     margin: 0em;

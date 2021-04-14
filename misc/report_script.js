@@ -473,29 +473,38 @@ const build_sizes = (() => {
     return `<div><h3>Build size summary</h3>${diff_table(size)}</div>`;
 })();
 
+let normalized_builds = DATA.builds.map(build => {
+    return build.files.map(file => {
+        let path = escapeHTML(file.path);
+        let tail = file.path.split("-").pop();
+        if (tail) {
+            let without_ext = tail.split(".")[0];
+
+            if (without_ext.length == 16) {
+                path = path.replaceAll(without_ext, `<span class="file-hex">x</span>`);
+            }
+        }
+        return { path, size: file.size };
+    });
+})
+
 let file_map = {};
 
-for (const build of DATA.builds) {
-    for (const file of build.files) {
+for (const files of normalized_builds) {
+    for (const file of files) {
         file_map[file.path] = true;
     }
 }
 
 let files = Object.keys(file_map).sort();
 
-let compiler_sizes = DATA.builds.map(build => {
-    return build.files
-        .filter(file => file.path.replaceAll("\\", "/").startsWith("bin/"))
-        .reduce((a, b) => a + b.size, 0);
-});
-
 let file_size = {
     type: 'File',
     columns: [{ name: 'Size', format: format_size }],
     rows: files.map(file => {
         return {
-            name: file, columns: [DATA.builds.map(build => {
-                let f = build.files.find(f => f.path === file);
+            name: file, columns: [normalized_builds.map(files => {
+                let f = files.find(f => f.path === file);
                 return f == undefined ? 0 : f.size;
             })]
         };
