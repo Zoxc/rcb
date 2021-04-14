@@ -822,7 +822,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         .collect::<Vec<_>>()
         .join(", ");
 
-    println!("Benchmarks: {}", bench_configs_desc);
+    println!("Benchmarks: {}\n", bench_configs_desc);
 
     let mut configs: Vec<ConfigInstances> = bench_configs
         .iter()
@@ -895,7 +895,9 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
 
         display.lock().unwrap().refresh();
 
-        run_benchs(&state, &mut configs, iterations, matches, display);
+        run_benchs(&state, &mut configs, iterations, matches, display.clone());
+
+        display.lock().unwrap().complete();
     }
 
     let build_names = builds

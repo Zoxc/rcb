@@ -18,6 +18,41 @@ impl Instance {
     }
 }
 
+fn print_values(values: &[f64], view: &mut View) {
+    let width = 32;
+    let pad = if view.col() < width {
+        width - view.col()
+    } else {
+        0
+    };
+    format!("{:1$}", "", pad).view(view);
+
+    let first = *values.first().unwrap();
+
+    for (i, avg) in values.iter().enumerate() {
+        term::color(100, 162, 217).view(view);
+        format!("{:>8.04}s", avg).view(view);
+        term::default_color().view(view);
+
+        if i > 0 {
+            let change = 100.0 * ((avg / first) - 1.0);
+
+            if change > 0.5 {
+                term::color(219, 126, 94).view(view);
+            } else if change < -0.5 {
+                term::color(143, 209, 98).view(view);
+            }
+
+            format!(" {:+6.02}%", change).view(view);
+            term::default_color().view(view);
+        }
+
+        if i != values.len() - 1 {
+            " ".view(view);
+        }
+    }
+}
+
 struct ConfigInstances {
     config: super::Config,
     builds: Vec<Instance>,
@@ -28,52 +63,20 @@ struct ConfigInstances {
 impl ConfigInstances {
     fn avgs(&self, view: &mut View) {
         let avgs: Option<Vec<f64>> = self.builds.iter().map(|instance| instance.avg()).collect();
-
-        let avgs = if let Some(avgs) = avgs { avgs } else { return };
-
-        let width = 32;
-        let pad = if view.col() < width {
-            width - view.col()
-        } else {
-            0
-        };
-        format!("{:1$}", "", pad).view(view);
-
-        let first = *avgs.first().unwrap();
-
-        for (i, avg) in avgs.iter().enumerate() {
-            term::color(100, 162, 217).view(view);
-            format!("{:>8.04}s", avg).view(view);
-            term::default_color().view(view);
-
-            if i > 0 {
-                let change = (avg / first) - 1.0;
-
-                if change > 0.01 {
-                    term::color(219, 126, 94).view(view);
-                } else if change < -0.01 {
-                    term::color(143, 209, 98).view(view);
-                }
-
-                format!(" {:+6.02}%", change * 100.0).view(view);
-                term::default_color().view(view);
-            }
-
-            if i != avgs.len() - 1 {
-                " ".view(view);
-            }
-        }
+        avgs.map(|avgs| print_values(&avgs, view));
     }
 }
 
 pub struct Display {
     view: View,
     configs: Vec<ConfigInstances>,
+    new_line_first: bool,
 }
 
 impl Display {
     pub(crate) fn new(configs: &Vec<super::ConfigInstances>, iterations: usize) -> Self {
         Display {
+            new_line_first: true,
             view: View::new(),
             configs: configs
                 .iter()
@@ -115,9 +118,11 @@ impl Display {
             config.completed = true;
             self.view.rewind();
 
-            term::color(145, 145, 145).view(&mut self.view);
-            "Completed ".view(&mut self.view);
-            term::default_color().view(&mut self.view);
+            if self.new_line_first {
+                term::newline().view(&mut self.view);
+                self.new_line_first = false;
+            }
+
             config.config.view(&mut self.view);
             " ".view(&mut self.view);
             config.avgs(&mut self.view);
@@ -130,6 +135,13 @@ impl Display {
 
     pub fn refresh(&mut self) {
         self.view.rewind();
+
+        term::newline().view(&mut self.view);
+
+        "Running benchmarks:".view(&mut self.view);
+
+        term::newline().view(&mut self.view);
+
         for config in self
             .configs
             .iter()
@@ -148,6 +160,47 @@ impl Display {
             config.avgs(&mut self.view);
             term::newline().view(&mut self.view);
         }
+        self.view.flush();
+    }
+
+    pub fn complete(&mut self) {
+        self.view.rewind();
+
+        let builds = self.configs[0].builds.len();
+        let totals: Vec<f64> = (0..builds)
+            .map(|build| {
+                self.configs
+                    .iter()
+                    .map(|config| config.builds[build].time_total)
+                    .sum::<f64>()
+            })
+            .collect();
+
+        term::newline().view(&mut self.view);
+
+        "Total ".view(&mut self.view);
+        print_values(&totals, &mut self.view);
+        term::newline().view(&mut self.view);
+
+        if builds > 1 {
+            let summary: Vec<f64> = (0..builds)
+                .map(|build| {
+                    let instance_rel_sum = self
+                        .configs
+                        .iter()
+                        .map(|config| config.builds[build].time_total / config.builds[0].time_total)
+                        .sum::<f64>();
+                    instance_rel_sum / (builds as f64)
+                })
+                .collect();
+
+            "Summary ".view(&mut self.view);
+            print_values(&summary, &mut self.view);
+            term::newline().view(&mut self.view);
+        }
+
+        term::newline().view(&mut self.view);
+
         self.view.flush();
     }
 }
