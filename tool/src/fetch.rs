@@ -184,17 +184,27 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
 
     let repo_path = state.repo_path(&repo);
 
+    let config: toml::Value = {
+        let config = t!(fs::read_to_string(repo_path.join("config.toml")));
+        toml::from_str(&config).expect("Invalid config.toml")
+    };
+
+    let triple = config
+        .get("build")
+        .and_then(|build| build.get("build").and_then(|triple| triple.as_str()))
+        .unwrap_or(TRIPLE);
+
     println!(
         "Fetching stage1 build from {} at {}, {}",
         repo,
         repo_path.display(),
-        env!("TARGET")
+        triple
     );
 
     let stage1 = state
         .repo_path(&repo)
         .join("build")
-        .join(TRIPLE)
+        .join(triple)
         .join("stage1")
         .to_owned();
 
@@ -266,7 +276,7 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
             upstream_title,
             size: build_size,
             signature,
-            triple: TRIPLE.to_owned(),
+            triple: triple.to_owned(),
             files,
             config,
         };
