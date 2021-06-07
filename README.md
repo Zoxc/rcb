@@ -19,13 +19,13 @@ cp rcb.example.toml rcb.toml
 
 First you build a compiler in one of your repositories, then you can fetch it to the `builds` folder in the repository root by this command:
 ```sh
-rcp fetch <repo-name>
+rcb fetch <repo-name>
 ```
 This will give you an identifier for the build, like `a~master~1`.
 
 Once you have multiple builds you can compare them with the `bench` command:
 ```sh
-rcp bench <builds..>
+rcb bench <builds..>
 ```
 
 For example `rcb bench a~master~1 b~foo~1 --bench regex --check` would compare the `a~master~1` build versus the `b~foo~1` using the benchmark `regex` with `cargo check`.
