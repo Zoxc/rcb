@@ -317,13 +317,17 @@ function md_change(c) {
     }
 }
 
-function md_diff_table(data) {
+function md_diff_table(data, rewrite) {
     let result = `<table><tr><td rowspan="2">${data.type}</td>`;
 
     for (const column of data.columns) {
         for (let i = 0; i < DATA.builds.length; i++) {
             const build = DATA.builds[i];
-            result += `<td colspan="${i > 0 ? 2 : 1}"><b>${build.name}</b></th>`
+            let name = build.name;
+            if (rewrite) {
+                name = i == DATA.builds.length - 1 ? "After" : "Before";
+            }
+            result += `<td colspan="${i > 0 ? 2 : 1}"><b>${name}</b></th>`
         }
     }
 
@@ -511,11 +515,11 @@ function summary_shared(md) {
 }
 
 function summary() {
-    return `<div><h3>Benchmark summary <span id="copy" onclick="copy_summary()">📋 Copy</span></h3>${diff_table(summary_shared())}</div>`;
+    return `<div><h3>Benchmark summary <span id="copy" onclick="copy_summary(false)">📋 Copy</span> <span id="copy" onclick="copy_summary(true)">📋 Copy (Before / After)</span></h3>${diff_table(summary_shared())}</div>`;
 }
 
-function copy_summary() {
-    navigator.clipboard.writeText(md_diff_table(summary_shared(true)));
+function copy_summary(rewrite) {
+    navigator.clipboard.writeText(md_diff_table(summary_shared(true), rewrite));
 }
 
 const build_sizes = (() => {
