@@ -1,3 +1,5 @@
+benchs = ["clap", "hyper", "regex", "syn", "syntex_syntax"]
+
 [repo.a]
 path = "/path/to/a"
 default = true

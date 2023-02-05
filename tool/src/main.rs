@@ -92,6 +92,7 @@ struct Repo {
 struct Config {
     iterations: Option<usize>,
     root: Option<PathBuf>,
+    benchs: Vec<String>,
     repo: HashMap<String, Repo>,
 }
 

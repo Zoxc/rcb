@@ -734,8 +734,12 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         .map(|b| b.collect())
         .unwrap_or_default();
 
-    let benchs = if selected_benchs.is_empty() {
+    let benchs: Vec<Arc<Bench>> = if selected_benchs.is_empty() {
         benchs
+            .iter()
+            .cloned()
+            .filter(|bench| state.config.benchs.contains(&bench.name))
+            .collect()
     } else {
         selected_benchs
             .into_iter()
