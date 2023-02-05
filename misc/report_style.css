@@ -230,12 +230,15 @@ h3 {
 #copy {
     cursor: pointer;
     font-size: 0.8em;
-    padding-left: 0.4em;
-    color: rgb(190, 190, 190);
+    padding: 0.4em;
+    padding-left: 0.6em;
+    border-radius: 5px;
+    color: rgba(0, 0, 0, 0.6);
 }
 
 #copy:hover {
     color: rgb(111, 51, 126);
+    background: rgba(111, 51, 126, 0.1);
 }
 
 body>div>p {
