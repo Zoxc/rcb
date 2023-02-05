@@ -944,6 +944,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let mut report = r#"<!doctype html>
     <html>
     <head>
+      <meta charset="UTF-8">
       <title>Benchmark results for "#
         .to_string();
 

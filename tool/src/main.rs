@@ -1,5 +1,3 @@
-#![feature(total_cmp)]
-
 use clap::SubCommand;
 use clap::{App, AppSettings, Arg};
 use rand::distributions::Alphanumeric;

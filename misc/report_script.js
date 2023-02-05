@@ -2,31 +2,49 @@ console.log("Report JSON", DATA);
 
 const DETAILS = DATA.benchs[0].builds[0].times !== null;
 
-function format_bench(name) {
+function format_bench(name, md) {
     let parts = name.split(":");
 
-    if (parts.length > 1) {
-        if (parts[1] == 'debug') {
-            parts[1] = `<span class="bench-debug">debug</span>`
-        }
-        if (parts[1] == 'check') {
-            parts[1] = `<span class="bench-check">check</span>`
-        }
-        if (parts[1] == 'release') {
-            parts[1] = `<span class="bench-release">release</span>`
-        }
-    }
+    if (md) {
+        parts[0] = `<b>` + parts[0] + `</b>`;
 
-    if (parts.length > 2) {
-        if (parts[2] == 'initial') {
-            parts[2] = `<span class="bench-incr">initial</span>`
+        if (parts.length > 1) {
+            if (parts[1] == 'debug') {
+                parts[0] = `🟠 ` + parts[0];
+            }
+            if (parts[1] == 'check') {
+                parts[0] = `🟣 ` + parts[0];
+            }
+            if (parts[1] == 'release') {
+                parts[0] = `🔵 ` + parts[0];
+            }
         }
-        if (parts[2] == 'unchanged') {
-            parts[2] = `<span class="bench-incr">unchanged</span>`
-        }
-    }
 
-    return `<span class="bench-name">${parts.join(`<span class="bench-colon">:</span>`)}</span>`;
+        return parts.join(`:`);
+    } else {
+        if (parts.length > 1) {
+            if (parts[1] == 'debug') {
+                parts[1] = `<span class="bench-debug">debug</span>`
+            }
+            if (parts[1] == 'check') {
+                parts[1] = `<span class="bench-check">check</span>`
+            }
+            if (parts[1] == 'release') {
+                parts[1] = `<span class="bench-release">release</span>`
+            }
+        }
+
+        if (parts.length > 2) {
+            if (parts[2] == 'initial') {
+                parts[2] = `<span class="bench-incr">initial</span>`
+            }
+            if (parts[2] == 'unchanged') {
+                parts[2] = `<span class="bench-incr">unchanged</span>`
+            }
+        }
+
+        return `<span class="bench-name">${parts.join(`<span class="bench-colon">:</span>`)}</span>`;
+    }
 }
 
 function format_time(secs) {
@@ -289,6 +307,62 @@ function build_details() {
     return result;
 }
 
+function md_change(c) {
+    if (c > 1) {
+        return '💔 ';
+    } else if (c < -1) {
+        return '💚 ';
+    } else {
+        return '';
+    }
+}
+
+function md_diff_table(data) {
+    let result = `<table><tr><td rowspan="2">${data.type}</td>`;
+
+    for (const column of data.columns) {
+        for (let i = 0; i < DATA.builds.length; i++) {
+            const build = DATA.builds[i];
+            result += `<td colspan="${i > 0 ? 2 : 1}"><b>${build.name}</b></th>`
+        }
+    }
+
+    result += "</tr><tr>";
+
+    for (const column of data.columns) {
+        for (let i = 0; i < DATA.builds.length; i++) {
+            result += `<td align="right">${column.name}</td>`;
+            if (i > 0) {
+                result += `<td align="right">%</th>`;
+            }
+        }
+    }
+
+    result += "</tr>";
+
+    for (const row of data.rows) {
+        result += `<tr><td>${row.name}</td>`;
+
+        for (let i = 0; i < row.columns.length; i++) {
+            const column = row.columns[i];
+            let first = column[0];
+            let format = data.columns[i].format;
+
+            for (let j = 0; j < DATA.builds.length; j++) {
+                result += `<td align="right">${format(column[j])}</td>`
+                if (j > 0) {
+                    let change = (column[j] / first - 1) * 100;
+                    result += `<td align="right">${md_change(change)} ${change.toFixed(2)}%</td>`;
+                }
+            }
+        }
+        result += "</tr>";
+    }
+    result += "</table>";
+
+    return result;
+}
+
 function diff_table(data) {
     let result = `<table><tr><th rowspan="2">${data.type}</th>`;
 
@@ -352,7 +426,7 @@ function export_bench_times() {
     return "Copied to clipboard";
 }
 
-function summary() {
+function summary_shared(md) {
     let summary = {
         type: 'Benchmark',
         columns: [{ name: 'Time', format: format_time }],
@@ -362,7 +436,7 @@ function summary() {
             if (DETAILS) {
                 rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024))
             };
-            let name = DETAILS ? `<a href="#${bench.name}">${format_bench(bench.name)}</a>` : format_bench(bench.name);
+            let name = (DETAILS && !md) ? `<a href="#${bench.name}">${format_bench(bench.name)}</a>` : format_bench(bench.name, md);
             return { name: name, columns: DETAILS ? [times, rss] : [times] };
         })
     };
@@ -433,7 +507,15 @@ function summary() {
         });
     }
 
-    return `<div><h3>Benchmark summary</h3>${diff_table(summary)}</div>`;
+    return summary;
+}
+
+function summary() {
+    return `<div><h3>Benchmark summary <span id="copy" onclick="copy_summary()">📋 Copy</span></h3>${diff_table(summary_shared())}</div>`;
+}
+
+function copy_summary() {
+    navigator.clipboard.writeText(md_diff_table(summary_shared(true)));
 }
 
 const build_sizes = (() => {

@@ -111,11 +111,11 @@ a:hover .bench-incr {
     text-align: left;
 }
 
-.extra-opts > h4 {
+.extra-opts>h4 {
     margin: 0.5em;
 }
 
-.flex > div {
+.flex>div {
     margin: 1em;
 }
 
@@ -168,7 +168,7 @@ a:hover .bench-incr {
     margin: 0.5em;
 }
 
-.build > h3 {
+.build>h3 {
     padding: 0.2em;
     padding-bottom: 1.1em;
 }
@@ -227,12 +227,23 @@ h3 {
     padding-bottom: 0.5em;
 }
 
-body > div > p {
+#copy {
+    cursor: pointer;
+    font-size: 0.8em;
+    padding-left: 0.4em;
+    color: rgb(190, 190, 190);
+}
+
+#copy:hover {
+    color: rgb(111, 51, 126);
+}
+
+body>div>p {
     color: rgb(87, 87, 87);
     margin-top: 0.8em;
 }
 
-body > div {
+body>div {
     text-align: center;
     background: #f5f5f5;
     margin: 0;
