@@ -133,7 +133,7 @@ function bench_detail(bench) {
         for (const entry in entries) {
             entries_avg[entry] = {
                 time: average_by(entries[entry], entry => entry.time),
-                rss: average_by(entries[entry], entry => parseFloat(entry.after_rss) * 1024 * 1024),
+                rss: average_by(entries[entry], entry => parseFloat(entry.after_rss)),
             };
         }
 
@@ -438,7 +438,7 @@ function summary_shared(md) {
             let times = bench.builds.map(build => average_by(build.time));
             let rss;
             if (DETAILS) {
-                rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024))
+                rss = bench.builds.map(build => average_by(build.times, rss => max_rss(rss)))
             };
             let name = (DETAILS && !md) ? `<a href="#${bench.name}">${format_bench(bench.name)}</a>` : format_bench(bench.name, md);
             return { name: name, columns: DETAILS ? [times, rss] : [times] };
@@ -454,7 +454,7 @@ function summary_shared(md) {
 
         let rss;
         if (DETAILS) {
-            rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024));
+            rss = bench.builds.map(build => average_by(build.times, time => max_rss(time)));
         } else {
             rss = bench.builds.map(build => 0);
         }
@@ -483,8 +483,8 @@ function summary_shared(md) {
 
         let rss;
         if (DETAILS) {
-            let first_rss = average_by(bench.builds[0].times, time => max_rss(time) * 1024 * 1024);
-            rss = bench.builds.map(build => average_by(build.times, time => max_rss(time) * 1024 * 1024) / first_rss);
+            let first_rss = average_by(bench.builds[0].times, rss => max_rss(rss));
+            rss = bench.builds.map(build => average_by(build.times, rss => max_rss(rss)) / first_rss);
         } else {
             rss = bench.builds.map(build => 0);
         }
@@ -503,7 +503,7 @@ function summary_shared(md) {
 
     if (DETAILS) {
         summary.rows.push({
-            name: `Summary`, columns: [times_a.map(build => build.time), times_a.map(build => build.rss * 1024 * 1024)]
+            name: `Summary`, columns: [times_a.map(build => build.time), times_a.map(build => build.rss)]
         });
     } else {
         summary.rows.push({

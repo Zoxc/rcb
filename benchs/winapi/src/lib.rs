@@ -4,9 +4,7 @@
 // All files in the project carrying such notice may not be copied, modified, or distributed
 // except according to those terms.
 #![cfg(windows)]
-#![deny(unused, unused_qualifications)]
-#![warn(unused_attributes)]
-#![allow(bad_style, overflowing_literals, unused_macros, deprecated, unused_crate_dependencies)]
+#![allow(warnings, bad_style, overflowing_literals, unused_macros, deprecated, unused_crate_dependencies)]
 #![recursion_limit = "2563"]
 #![no_std]
 //Uncomment as needed or once minimum Rust version is bumped to 1.18

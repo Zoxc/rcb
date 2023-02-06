@@ -167,8 +167,8 @@ fn remove_fingerprint(mut fingerprints: Vec<(String, PathBuf)>, krate: &str) {
 struct TimeData {
     name: String,
     time: f64,
-    before_rss: String,
-    after_rss: String,
+    before_rss: u64,
+    after_rss: u64,
 }
 
 #[derive(Serialize)]
@@ -270,7 +270,7 @@ impl Instance {
         }
 
         let mut rflags = if self.config.details {
-            vec!["-Ztime".to_owned()]
+            vec!["-Ztime-precise".to_owned()]
         } else {
             Vec::new()
         };
@@ -417,9 +417,10 @@ impl Instance {
                             let name = parts.last().unwrap().to_string();
                             Some(TimeData {
                                 name,
-                                before_rss: parts[3].to_string(),
-                                after_rss: parts[5].to_string(),
-                                time: str::parse(parts[1].trim_end_matches(";")).unwrap(),
+                                before_rss: str::parse(parts[3].trim_end_matches("B")).unwrap(),
+                                after_rss: str::parse(parts[5].trim_end_matches("B")).unwrap(),
+                                time: str::parse::<f64>(parts[1].trim_end_matches("ns;")).unwrap()
+                                    / (1000.0 * 1000.0),
                             })
                         } else {
                             None
