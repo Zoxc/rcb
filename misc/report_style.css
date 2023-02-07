@@ -1,0 +1,271 @@
+body {
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    background: #f5f5f5;
+    color: #333333;
+}
+
+html {
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+table {
+    margin: auto;
+    background: #dadada;
+    box-shadow: 0.1em 0.1em 1.7em rgba(0, 0, 0, 0.08);
+    border-radius: 5px;
+    border: 1px solid rgb(218, 218, 218);
+    padding: 1px;
+}
+
+a {
+    color: inherit;
+    text-decoration: inherit;
+}
+
+a:hover {
+    color: rgb(81, 115, 177);
+}
+
+td,
+th {
+    padding: 0.5em;
+    font-weight: normal;
+}
+
+.bh,
+.bench-name {
+    font-weight: bold;
+}
+
+.bench-colon {
+    color: rgb(109, 109, 109);
+}
+
+.bench-debug {
+    font-weight: normal;
+    color: rgb(145, 113, 55);
+}
+
+a:hover .bench-debug {
+    color: rgb(175, 142, 81);
+}
+
+.bench-check {
+    font-weight: normal;
+    color: rgb(121, 40, 124);
+}
+
+a:hover .bench-check {
+    color: rgb(167, 74, 170);
+}
+
+.bench-release {
+    font-weight: normal;
+    color: rgb(43, 91, 136);
+}
+
+a:hover .bench-release {
+    color: rgb(66, 124, 179);
+}
+
+.bench-incr {
+    font-weight: normal;
+    color: rgb(119, 138, 113);
+}
+
+a:hover .bench-incr {
+    color: rgb(135, 161, 126);
+}
+
+.file-hex {
+    padding: 0.2em;
+    margin: 0.1em;
+    color: #00000077;
+    background: #898d7f07;
+    box-shadow: 0.1em 0.1em 0.4em rgba(0, 0, 0, 0.025);
+    border-radius: 5px;
+    border: 1px solid #4e4b4b1f;
+}
+
+.extra-opts {
+    padding: 1em;
+    margin: 0em;
+    margin-top: 1em;
+    background: #9b5b8d;
+    color: rgb(241, 229, 240);
+    box-shadow: 0.1em 0.1em 1.7em rgba(90, 45, 99, 0.473);
+    border-radius: 5px;
+    border: 0px solid rgb(107, 45, 95);
+    text-shadow: 0px 1px 3px rgba(0, 0, 0, 0.445);
+}
+
+.build h4 {
+    margin: 0.5em;
+    margin-top: 1em;
+    text-align: left;
+}
+
+.extra-opts>h4 {
+    margin: 0.5em;
+}
+
+.flex>div {
+    margin: 1em;
+}
+
+.flex {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.build-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.build {
+    padding: 1.5em;
+    margin: 1.5em;
+    background: #f7f5f5;
+    box-shadow: 0.1em 0.1em 1.7em rgba(0, 0, 0, 0.08);
+    border-radius: 5px;
+    border: 1px solid rgb(218, 218, 218);
+    width: fit-content;
+    /*margin: auto;
+    margin-bottom: 2em;
+    margin-top: 2em;*/
+}
+
+.common-build .build {
+    width: initial;
+}
+
+.bench-opt {
+    padding: 0.3em;
+    background: #ebe5d8;
+    box-shadow: 0.1em 0.1em 0.6em rgba(0, 0, 0, 0.055);
+    border-radius: 5px;
+    border: 1px solid #cfc2a4;
+    margin-right: 0.3em;
+}
+
+.extra-opts .bench-opt {
+    background: #d6d6d623;
+    border: 1px solid #dfdfdf8c;
+}
+
+.build p {
+    margin: 0.5em;
+}
+
+.build>h3 {
+    padding: 0.2em;
+    padding-bottom: 1.1em;
+}
+
+.split {
+    display: flex;
+    justify-content: space-between;
+}
+
+.split p {
+    margin: 0.5em;
+}
+
+td {
+    background: #f1f1f1;
+    text-align: right;
+}
+
+.r {
+    text-align: right;
+}
+
+.l {
+    text-align: left;
+}
+
+th {
+    background: #ebebeb;
+    text-align: left;
+}
+
+th.r,
+th.event {
+    color: rgb(73, 73, 73);
+    background: #e0e0e0;
+    font-weight: normal;
+}
+
+h1,
+h3 {
+    font-weight: normal;
+    margin: 0;
+    color: rgb(90, 90, 90);
+}
+
+h1 {
+    font-size: 1.6em;
+    padding: 2em;
+    padding-bottom: 0em;
+}
+
+h3 {
+    font-size: 1.2em;
+    margin: 0em;
+    padding: 0em;
+    padding-bottom: 0.5em;
+}
+
+#copy {
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 0.4em;
+    padding-left: 0.6em;
+    border-radius: 5px;
+    color: rgba(0, 0, 0, 0.6);
+}
+
+#copy:hover {
+    color: rgb(111, 51, 126);
+    background: rgba(111, 51, 126, 0.1);
+}
+
+body>div>p {
+    color: rgb(87, 87, 87);
+    margin-top: 0.8em;
+}
+
+body>div {
+    text-align: center;
+    background: #f5f5f5;
+    margin: 0;
+    padding: 0;
+    padding-bottom: 2em;
+}
+
+.positive {
+    color: rgb(216, 78, 78);
+}
+
+.slightly-positive {
+    color: #835959;
+}
+
+.negative {
+    color: rgb(80, 182, 80);
+}
+
+.slightly-negative {
+    color: #637e63;
+}
