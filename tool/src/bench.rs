@@ -813,6 +813,26 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
         .collect();
 
     t!(fs::create_dir_all(state.root.join("tmp")));
+
+    // Cleanup stale temporary directories
+    fs::read_dir(state.root.join("tmp"))
+        .map(|entries| {
+            for entry in entries {
+                entry
+                    .map(|entry| {
+                        if entry
+                            .file_name()
+                            .to_str()
+                            .map_or(false, |f| f.starts_with("rcb-"))
+                        {
+                            crate::remove_recursively(&entry.path());
+                        }
+                    })
+                    .ok();
+            }
+        })
+        .ok();
+
     let session_dir = crate::temp_dir(&state.root.join("tmp"));
 
     let session_dir2 = session_dir.clone();

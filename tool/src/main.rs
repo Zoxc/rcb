@@ -158,7 +158,7 @@ fn temp_dir(parent: &Path) -> PathBuf {
             .map(char::from)
             .take(32)
             .collect();
-        let tmp = parent.join(&temp_name).to_owned();
+        let tmp = parent.join(format!("rcb-{temp_name}")).to_owned();
         if fs::create_dir(&tmp).is_ok() {
             return tmp;
         }
