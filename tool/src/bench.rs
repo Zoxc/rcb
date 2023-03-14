@@ -270,7 +270,10 @@ impl Instance {
         }
 
         let mut rflags = if self.config.details {
-            vec!["-Ztime-precise".to_owned()]
+            vec![
+                "-Ztime-passes".to_owned(),
+                "-Ztime-passes-format=json".to_owned(),
+            ]
         } else {
             Vec::new()
         };
@@ -413,14 +416,12 @@ impl Instance {
                     .filter_map(|line| {
                         let line = line.trim();
                         if line.starts_with("time:") {
-                            let parts: Vec<&str> = line.split_ascii_whitespace().collect();
-                            let name = parts.last().unwrap().to_string();
-                            Some(TimeData {
-                                name,
-                                before_rss: str::parse(parts[3].trim_end_matches("B")).unwrap(),
-                                after_rss: str::parse(parts[5].trim_end_matches("B")).unwrap(),
-                                time: str::parse::<f64>(parts[1].trim_end_matches("ns;")).unwrap()
-                                    / (1000.0 * 1000.0),
+                            let json: serde_json::Value = serde_json::from_str(&line[5..]).unwrap();
+                            json["unique"].as_bool().unwrap().then(|| TimeData {
+                                name: json["pass"].as_str().unwrap().to_owned(),
+                                before_rss: json["rss_start"].as_u64().unwrap(),
+                                after_rss: json["rss_end"].as_u64().unwrap(),
+                                time: json["time"].as_f64().unwrap(),
                             })
                         } else {
                             None
