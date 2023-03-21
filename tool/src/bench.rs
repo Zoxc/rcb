@@ -10,8 +10,9 @@ use clap::ArgMatches;
 use core::panic;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use serde_derive::{Deserialize, Serialize};
+use std::cmp;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs::{self, File},
     io::Write,
     path::Path,
@@ -417,7 +418,7 @@ impl Instance {
                         let line = line.trim();
                         if line.starts_with("time:") {
                             let json: serde_json::Value = serde_json::from_str(&line[5..]).unwrap();
-                            json["unique"].as_bool().unwrap().then(|| TimeData {
+                            Some(TimeData {
                                 name: json["pass"].as_str().unwrap().to_owned(),
                                 before_rss: json["rss_start"].as_u64().unwrap(),
                                 after_rss: json["rss_end"].as_u64().unwrap(),
@@ -440,17 +441,19 @@ impl Instance {
                     times = times.split_off(split_at);
                 }
 
-                let mut seen = HashSet::new();
+                let mut data: HashMap<String, TimeData> = HashMap::new();
 
                 for time in &times {
-                    if !seen.insert(time.name.clone()) {
-                        panic!(
-                            "Duplicate -Z time entry for `{}` in {}",
-                            time.name,
-                            self.display()
-                        );
-                    }
+                    data.entry(time.name.clone())
+                        .and_modify(|prev| {
+                            prev.time += time.time;
+                            prev.before_rss = cmp::min(prev.before_rss, time.before_rss);
+                            prev.after_rss = cmp::max(prev.after_rss, time.after_rss);
+                        })
+                        .or_insert(time.clone());
                 }
+
+                let times: Vec<_> = times.iter().map(|time| data[&time.name].clone()).collect();
 
                 self.times.push(times);
             }
