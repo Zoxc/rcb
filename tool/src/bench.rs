@@ -836,10 +836,8 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let session_dir = crate::temp_dir(&state.root.join("tmp"));
 
     let session_dir2 = session_dir.clone();
-    let state2 = state.clone();
     let _drop_session_dir = OnDrop(move || {
         crate::remove_recursively(&session_dir2);
-        fs::remove_dir(state2.root.join("tmp")).ok();
     });
 
     let bench_configs_desc = bench_configs
