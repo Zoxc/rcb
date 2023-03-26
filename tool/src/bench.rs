@@ -1,4 +1,5 @@
 use crate::bench::display::Display;
+use crate::fetch::copy_recursively;
 use crate::term;
 use crate::term::View;
 use crate::term::Viewable;
@@ -218,6 +219,14 @@ impl Instance {
         )
     }
 
+    fn input_path(&self) -> &Path {
+        if self.state.config.copy_inputs.unwrap_or_default() {
+            &self.session_dir
+        } else {
+            &self.state.root
+        }
+    }
+
     fn path(&self) -> PathBuf {
         self.session_dir.join(format!(
             "{}-{}",
@@ -229,12 +238,16 @@ impl Instance {
     fn cargo(&self, prepare: bool) -> Command {
         let mut output = Command::new("cargo");
         output
-            .current_dir(&self.config.bench.cargo_dir)
+            .current_dir(
+                self.input_path()
+                    .join("benchs")
+                    .join(&self.config.bench.name)
+                    .join(&self.config.bench.cargo_dir),
+            )
             .stdin(Stdio::null())
             .env(
                 "RUSTC",
-                self.state
-                    .root
+                self.input_path()
                     .join("builds")
                     .join(&self.build.name)
                     .join("stage1")
@@ -747,7 +760,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
                 let name = name.to_string_lossy().into_owned();
                 Some(Arc::new(Bench {
                     name,
-                    cargo_dir: path.join(info.cargo_dir.unwrap_or(".".to_owned())),
+                    cargo_dir: Path::new(&info.cargo_dir.unwrap_or(".".to_owned())).to_owned(),
                 }))
             } else {
                 None
@@ -863,6 +876,19 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let _drop_session_dir = OnDrop(move || {
         crate::remove_recursively(&session_dir2);
     });
+
+    if state.config.copy_inputs.unwrap_or_default() {
+        println!("Copying inputs");
+
+        for bench in &benchs {
+            let path = Path::new("benchs").join(&bench.name);
+            copy_recursively(&state, &state.root.join(&path), &session_dir.join(path));
+        }
+        for build in &builds {
+            let path = Path::new("builds").join(&build.name);
+            copy_recursively(&state, &state.root.join(&path), &session_dir.join(path));
+        }
+    }
 
     let bench_configs_desc = bench_configs
         .iter()

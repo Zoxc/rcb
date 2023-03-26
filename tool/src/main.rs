@@ -89,8 +89,10 @@ struct Repo {
 }
 
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 struct Config {
     iterations: Option<usize>,
+    copy_inputs: Option<bool>,
     root: Option<PathBuf>,
     benchs: Vec<String>,
     repo: HashMap<String, Repo>,
