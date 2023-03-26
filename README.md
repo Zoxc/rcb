@@ -43,6 +43,7 @@ To get an idea about the noisy on your system you can specify the same build twi
 ## Command line options for `bench`
 
 - `-n <iterations>`: The number of iterations to build crates for each build.
+- `-w <iterations>`: The number of iterations to warm up builds, by default 1 round is used.
 - `-j <jobs>`: The number of parallel instances for benchmarks, by default only 1 job runs at a time.
 - `--details <mode>`: Pass `none` to disable collection of pass and memory details from `rustc` using `-Z time-precise` and `time` to enable it. By default it is enabled.
 

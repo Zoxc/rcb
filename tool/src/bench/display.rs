@@ -4,8 +4,10 @@ use crate::term::{self, View};
 
 struct Instance {
     iterations: usize,
+    warmups: usize,
     time_total: f64,
     time_last: f64,
+    warmup_count: usize,
     count: usize,
 }
 
@@ -95,7 +97,11 @@ pub struct Display {
 }
 
 impl Display {
-    pub(crate) fn new(configs: &Vec<super::ConfigInstances>, iterations: usize) -> Self {
+    pub(crate) fn new(
+        configs: &Vec<super::ConfigInstances>,
+        iterations: usize,
+        warmups: usize,
+    ) -> Self {
         Display {
             new_line_first: true,
             view: View::new(),
@@ -110,9 +116,11 @@ impl Display {
                         .iter()
                         .map(|_| Instance {
                             iterations,
+                            warmups,
                             time_total: 0.0,
                             time_last: 0.0,
                             count: 0,
+                            warmup_count: 0,
                         })
                         .collect(),
                 })
@@ -122,6 +130,13 @@ impl Display {
 
     pub fn start_config(&mut self, config_index: usize) {
         self.configs[config_index].started = true;
+        self.refresh();
+    }
+
+    pub fn report_warmup(&mut self, config_index: usize, build_index: usize) {
+        let config = &mut self.configs[config_index];
+        let mut instance = &mut config.builds[build_index];
+        instance.warmup_count += 1;
         self.refresh();
     }
 
@@ -170,16 +185,35 @@ impl Display {
             .iter()
             .filter(|config| config.started && !config.completed)
         {
-            let count: usize = config.builds.iter().map(|instance| instance.count).sum();
-            let total: usize = config
+            let warmup = config
                 .builds
                 .iter()
-                .map(|instance| instance.iterations)
-                .sum();
+                .any(|instance| instance.warmup_count < instance.warmups);
 
-            " - ".view(&mut self.view);
-            config.config.view(&mut self.view);
-            format!(" ({}/{}) ", count, total).view(&mut self.view);
+            if warmup {
+                let count: usize = config
+                    .builds
+                    .iter()
+                    .map(|instance| instance.warmup_count)
+                    .sum();
+                let total: usize = config.builds.iter().map(|instance| instance.warmups).sum();
+
+                " - ".view(&mut self.view);
+                config.config.view(&mut self.view);
+                format!(" (warming up {}/{}) ", count, total).view(&mut self.view);
+            } else {
+                let count: usize = config.builds.iter().map(|instance| instance.count).sum();
+                let total: usize = config
+                    .builds
+                    .iter()
+                    .map(|instance| instance.iterations)
+                    .sum();
+
+                " - ".view(&mut self.view);
+                config.config.view(&mut self.view);
+                format!(" ({}/{}) ", count, total).view(&mut self.view);
+            }
+
             config.avgs(&mut self.view);
             term::newline().view(&mut self.view);
         }

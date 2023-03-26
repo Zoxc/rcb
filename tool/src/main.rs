@@ -219,6 +219,7 @@ fn main() {
         )
         .arg(Arg::with_name("details").long("details").takes_value(true))
         .arg(Arg::with_name("iterations").short("n").takes_value(true))
+        .arg(Arg::with_name("warmup").short("w").takes_value(true))
         .arg(Arg::with_name("incr-none").long("incr-none"))
         .arg(Arg::with_name("incr-initial").long("incr-initial"))
         .arg(Arg::with_name("incr-unchanged").long("incr-unchanged"))

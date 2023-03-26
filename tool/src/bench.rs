@@ -318,7 +318,7 @@ impl Instance {
         // Run an extra time to remove cached queries that can't follow from one unchanged
         // session to the next
         if self.config.incremental == IncrementalMode::Unchanged {
-            self.run(true, None);
+            self.run(true, true, None);
         }
     }
 
@@ -351,7 +351,7 @@ impl Instance {
         }
     }
 
-    fn run(&mut self, warmup: bool, display: Option<&Mutex<Display>>) {
+    fn run(&mut self, incremental_extra: bool, warmup: bool, display: Option<&Mutex<Display>>) {
         self.remove_fingerprint();
 
         let mut output = self.cargo(false);
@@ -371,7 +371,18 @@ impl Instance {
             panic!("Unable to run instance");
         }
 
-        if !warmup {
+        if incremental_extra {
+            return;
+        }
+
+        if warmup {
+            display.map(|display| {
+                display
+                    .lock()
+                    .unwrap()
+                    .report_warmup(self.config_index, self.build_index)
+            });
+        } else {
             let stderr = t!(std::str::from_utf8(&output.stderr));
 
             let mut time: Vec<_> = stderr
@@ -559,6 +570,7 @@ fn run_benchs(
     state: &State,
     configs: &mut Vec<ConfigInstances>,
     iterations: usize,
+    warmups: usize,
     matches: &ArgMatches,
     display: Arc<Mutex<Display>>,
 ) {
@@ -566,7 +578,7 @@ fn run_benchs(
 
     if threads == 1 {
         for config in configs {
-            run_bench(config, iterations, 0, None, &display);
+            run_bench(config, iterations, warmups, 0, None, &display);
         }
     } else {
         let costs = state.root.join("benchs").join("cost.toml");
@@ -594,7 +606,7 @@ fn run_benchs(
                     let config = configs.lock().unwrap().pop();
 
                     if let Some((config, _)) = config {
-                        run_bench(config, iterations, i, Some(&last_event), &display);
+                        run_bench(config, iterations, warmups, i, Some(&last_event), &display);
                     } else {
                         break;
                     }
@@ -636,22 +648,26 @@ fn wait_event(thread: usize, last_event: Option<&Mutex<Vec<Instant>>>) {
 fn run_bench(
     config: &mut ConfigInstances,
     iterations: usize,
+    warmups: usize,
     thread: usize,
     last_event: Option<&Mutex<Vec<Instant>>>,
     display: &Mutex<Display>,
 ) {
     display.lock().unwrap().start_config(config.config_index);
 
-    for instance in &mut *config.builds {
-        wait_event(thread, last_event);
-        instance.run(true, Some(display));
-        set_event(thread, last_event);
+    for _ in 0..warmups {
+        for instance in &mut *config.builds {
+            wait_event(thread, last_event);
+            instance.run(false, true, Some(display));
+            set_event(thread, last_event);
+        }
     }
+
     for _ in 0..iterations {
         for instance in &mut *config.builds {
             sleep(Duration::from_millis(200));
             wait_event(thread, last_event);
-            instance.run(false, Some(display));
+            instance.run(false, false, Some(display));
             set_event(thread, last_event);
         }
     }
@@ -672,7 +688,12 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     let iterations =
         value_t!(matches, "iterations", usize).unwrap_or(state.config.iterations.unwrap_or(8));
     let iterations = std::cmp::max(1, iterations);
-    println!("Using {} iterations", iterations);
+    let warmups = value_t!(matches, "warmup", usize).unwrap_or(1);
+
+    println!(
+        "Using {} iterations with {} warmup round(s)",
+        iterations, warmups
+    );
 
     let builds: Vec<Build> = matches
         .values_of("BUILD")
@@ -918,11 +939,18 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
     }
 
     {
-        let display = Arc::new(Mutex::new(Display::new(&configs, iterations)));
+        let display = Arc::new(Mutex::new(Display::new(&configs, iterations, warmups)));
 
         display.lock().unwrap().refresh();
 
-        run_benchs(&state, &mut configs, iterations, matches, display.clone());
+        run_benchs(
+            &state,
+            &mut configs,
+            iterations,
+            warmups,
+            matches,
+            display.clone(),
+        );
 
         display.lock().unwrap().complete();
     }
