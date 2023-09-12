@@ -271,6 +271,10 @@ impl Instance {
             output
                 .env("RUSTC_WRAPPER", &self.state.exe)
                 .env("RCB_ACT_AS_RUSTC", "1");
+
+            if self.config.details {
+                output.env("RCB_TIME_DETAILS", "1");
+            }
         }
 
         match self.config.mode {
@@ -286,14 +290,7 @@ impl Instance {
             }
         }
 
-        let mut rflags = if self.config.details {
-            vec![
-                "-Ztime-passes".to_owned(),
-                "-Ztime-passes-format=json".to_owned(),
-            ]
-        } else {
-            Vec::new()
-        };
+        let mut rflags = Vec::new();
         rflags.extend_from_slice(&self.build.rflags);
         output.env("RUSTFLAGS", rflags.join(" "));
 
@@ -376,7 +373,9 @@ impl Instance {
 
         let mut output = self.cargo(false);
 
-        output.env("RCB_TIME_PREFIX", &prefix);
+        if !warmup {
+            output.env("RCB_TIME_PREFIX", &prefix);
+        }
 
         let output = t!(output.output());
 
@@ -423,7 +422,8 @@ impl Instance {
 
             if time.len() != 1 {
                 panic!(
-                    "Multiple time results for {}\nSTDERR:{}",
+                    "Wrong time result count ({}) for {}\nSTDERR:{}",
+                    time.len(),
                     self.display(),
                     stderr
                 );
@@ -442,7 +442,7 @@ impl Instance {
             self.time.push(time);
 
             if self.config.details {
-                let mut times: Vec<TimeData> = stderr
+                let times: Vec<TimeData> = stderr
                     .trim()
                     .lines()
                     .filter_map(|line| {
@@ -467,9 +467,13 @@ impl Instance {
                     .filter(|(_, time)| time.name == "total")
                     .collect();
 
-                if totals.len() > 1 {
-                    let split_at = totals[totals.len() - 2].0 + 1;
-                    times = times.split_off(split_at);
+                if totals.len() != 1 {
+                    panic!(
+                        "Wrong total result count ({}) for {}\nSTDERR:{}",
+                        totals.len(),
+                        self.display(),
+                        stderr
+                    );
                 }
 
                 let mut data: HashMap<String, TimeData> = HashMap::new();
