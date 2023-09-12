@@ -61,16 +61,12 @@ function format_size(bytes) {
     else if (bytes >= 1024) {
         return (bytes / 1024).toFixed(2) + " KiB";
     }
-    else if (bytes > 1) {
-        return bytes + " bytes";
-    }
     else if (bytes == 1) {
         return bytes + " byte";
     }
-    else if (bytes == 0) {
-        return "0 bytes";
+    else {
+        return bytes.toFixed(2) + " bytes";
     }
-    throw `unable to convert bytes ${JSON.stringify(bytes)}`;
 }
 
 function change(average, first, b) {

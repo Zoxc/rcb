@@ -14,11 +14,13 @@ pub fn run() -> ! {
 
     let start = Instant::now();
 
+    let prefix = env::var("RCB_TIME_PREFIX").unwrap();
+
     let status = output.status().expect("failed to execute the real rustc");
 
     let duration = start.elapsed();
 
-    eprintln!("rcb-rustc-timer:{}", duration.as_micros());
+    eprintln!("{}{}", prefix, duration.as_micros());
 
     std::process::exit(status.code().unwrap_or(-1));
 }

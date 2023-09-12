@@ -1,11 +1,15 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-fn map<K: Hash + Debug + Eq + Clone, V: Debug>(k: K, v: V) {
+fn map<K: Hash + Debug + Eq + Clone, V: Debug + Clone>(k: K, v: V) {
     let mut map = HashMap::new();
-    map.insert(k.clone(), v);
+    map.insert(k.clone(), v.clone());
     map.reserve(1000);
+    if let Entry::Vacant(o) = map.entry(k.clone()) {
+        o.insert(v);
+    }
     dbg!(map.get(&k), map.iter().next());
 }
 

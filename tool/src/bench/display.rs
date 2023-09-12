@@ -135,14 +135,14 @@ impl Display {
 
     pub fn report_warmup(&mut self, config_index: usize, build_index: usize) {
         let config = &mut self.configs[config_index];
-        let mut instance = &mut config.builds[build_index];
+        let instance = &mut config.builds[build_index];
         instance.warmup_count += 1;
         self.refresh();
     }
 
     pub fn report(&mut self, config_index: usize, build_index: usize, result: f64) {
-        let mut config = &mut self.configs[config_index];
-        let mut instance = &mut config.builds[build_index];
+        let config = &mut self.configs[config_index];
+        let instance = &mut config.builds[build_index];
         instance.count += 1;
         instance.time_total += result;
         instance.time_last = result;

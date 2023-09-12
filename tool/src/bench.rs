@@ -9,6 +9,8 @@ use crate::State;
 use clap::value_t;
 use clap::ArgMatches;
 use core::panic;
+use rand::distributions::Uniform;
+use rand::Rng;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use serde_derive::{Deserialize, Serialize};
 use std::cmp;
@@ -194,6 +196,7 @@ struct Result {
 }
 
 struct Instance {
+    run_key: usize,
     config_index: usize,
     build_index: usize,
     session_dir: PathBuf,
@@ -365,9 +368,15 @@ impl Instance {
     }
 
     fn run(&mut self, incremental_extra: bool, warmup: bool, display: Option<&Mutex<Display>>) {
+        let prefix = format!("rcb-rustc-timer({}):", self.run_key);
+
+        self.run_key += 1;
+
         self.remove_fingerprint();
 
         let mut output = self.cargo(false);
+
+        output.env("RCB_TIME_PREFIX", &prefix);
 
         let output = t!(output.output());
 
@@ -403,10 +412,8 @@ impl Instance {
                 .lines()
                 .filter_map(|line| {
                     let line = line.trim();
-                    if line.starts_with("rcb-rustc-timer:") {
-                        let parts: Vec<&str> = line.split(":").collect();
-                        let time = parts.last().unwrap();
-                        let time = Duration::from_micros(str::parse(time).unwrap());
+                    if let Some(rest) = line.strip_prefix(&prefix) {
+                        let time = Duration::from_micros(str::parse(rest).unwrap());
                         Some(time.as_secs_f64())
                     } else {
                         None
@@ -908,6 +915,7 @@ pub fn bench(state: Arc<State>, matches: &ArgMatches) {
                 .iter()
                 .enumerate()
                 .map(|(build_index, build)| Instance {
+                    run_key: rand::thread_rng().sample(Uniform::new_inclusive(0, usize::MAX)),
                     config_index,
                     build_index,
                     time: Vec::new(),
