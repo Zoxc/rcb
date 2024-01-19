@@ -205,18 +205,24 @@ fn main() {
             Arg::with_name("rflag")
                 .long("rflag")
                 .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
                 .help("Arguments to rustc"),
         )
         .arg(
             Arg::with_name("cflag")
                 .long("cflag")
                 .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
                 .help("Arguments to cargo"),
         )
         .arg(
             Arg::with_name("env")
                 .long("env")
                 .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
                 .help("Enviroment variable to cargo"),
         )
         .arg(Arg::with_name("details").long("details").takes_value(true))
