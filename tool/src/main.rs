@@ -185,6 +185,7 @@ fn main() {
         .arg(
             Arg::with_name("bench")
                 .multiple(true)
+                .number_of_values(1)
                 .short("b")
                 .long("bench")
                 .takes_value(true),
