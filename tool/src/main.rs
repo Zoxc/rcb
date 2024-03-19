@@ -9,7 +9,6 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use toml;
 
 pub struct OnDrop<F: Fn()>(pub F);
 
@@ -66,6 +65,7 @@ struct BuildFile {
 struct Build {
     name: String,
     path: String,
+    stage: usize,
     repo: String,
     repo_path: PathBuf,
     branch: Option<String>,
@@ -179,6 +179,12 @@ fn main() {
 
     let fetch = SubCommand::with_name("fetch")
         .arg(Arg::with_name("ref").long("ref"))
+        .arg(
+            Arg::with_name("stage")
+                .long("stage")
+                .takes_value(true)
+                .help("rustc stage to fetch"),
+        )
         .arg(Arg::with_name("REPO"));
     let bench = SubCommand::with_name("bench")
         .arg(Arg::with_name("BUILD").multiple(true).required(true))

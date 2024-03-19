@@ -3,6 +3,7 @@ use crate::Build;
 use crate::BuildFile;
 use crate::OnDrop;
 use crate::State;
+use clap::value_t;
 use clap::ArgMatches;
 use data_encoding::HEXLOWER;
 use rayon::prelude::*;
@@ -177,6 +178,8 @@ fn find_build_name(state: &State, prefix: &str, signature: &str) -> (String, Pat
 pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
     t!(fs::create_dir_all(state.root.join("builds")));
 
+    let stage = value_t!(matches, "stage", usize).unwrap_or(1);
+
     let repo = matches
         .value_of("REPO")
         .map(|repo| state.repo(repo.to_owned()))
@@ -195,20 +198,20 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
         .unwrap_or(TRIPLE);
 
     println!(
-        "Fetching stage1 build from {} at {}, {}",
+        "Fetching stage{stage} build from {} at {}, {}",
         repo,
         repo_path.display(),
         triple
     );
 
-    let stage1 = state
+    let stage_path = state
         .repo_path(&repo)
         .join("build")
         .join(triple)
-        .join("stage1")
+        .join(format!("stage{stage}"))
         .to_owned();
 
-    let mut rustc = stage1.join("bin").join("rustc").to_owned();
+    let mut rustc = stage_path.join("bin").join("rustc").to_owned();
     rustc.set_extension(std::env::consts::EXE_EXTENSION);
 
     println!("exe {}", rustc.display(),);
@@ -246,9 +249,10 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
         crate::remove_recursively(&tmp_path2);
     });
 
-    copy_recursively(&state, &stage1, &tmp_path.join("stage1"));
+    copy_recursively(&state, &stage_path, &tmp_path.join(format!("stage{stage}")));
 
-    let (signature, build_size, files) = get_build_signature(&tmp_path.join("stage1"));
+    let (signature, build_size, files) =
+        get_build_signature(&tmp_path.join(format!("stage{stage}")));
 
     let (name, build_path) = find_build_name(
         &state,
@@ -264,7 +268,8 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
 
         let build = Build {
             name: name.clone(),
-            path: "stage1".to_owned(),
+            path: format!("stage{stage}"),
+            stage,
             repo,
             repo_path: repo_path.clone(),
             branch,

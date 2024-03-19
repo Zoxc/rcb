@@ -31,6 +31,7 @@ mod display;
 #[derive(Serialize, Default)]
 struct BuildConfig {
     index: usize,
+    stage: usize,
     name: String,
     threads: bool,
     rflags: Vec<String>,
@@ -253,7 +254,7 @@ impl Instance {
                 self.input_path()
                     .join("builds")
                     .join(&self.build.name)
-                    .join("stage1")
+                    .join(format!("stage{}", self.build.stage))
                     .join("bin")
                     .join("rustc"),
             )
@@ -548,6 +549,7 @@ fn build_configs(matches: &ArgMatches, builds: &[Build]) -> Vec<Arc<BuildConfig>
         .enumerate()
         .map(|(index, build)| BuildConfig {
             index,
+            stage: build.stage,
             name: build.name.clone(),
             ..Default::default()
         })
