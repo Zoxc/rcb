@@ -180,6 +180,8 @@ struct TimeData {
 struct ResultConfig {
     build: String,
     time: Vec<f64>,
+    peak_physical: Option<Vec<usize>>,
+    peak_committed: Option<Vec<usize>>,
     times: Option<Vec<Vec<TimeData>>>,
 }
 
@@ -196,6 +198,13 @@ struct Result {
     benchs: Vec<ResultBench>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct InstanceTime {
+    pub duration: f64,
+    pub peak_physical: Option<usize>,
+    pub peak_committed: Option<usize>,
+}
+
 struct Instance {
     run_key: usize,
     config_index: usize,
@@ -204,7 +213,7 @@ struct Instance {
     state: Arc<State>,
     build: Arc<BuildConfig>,
     config: Config,
-    time: Vec<f64>,
+    time: Vec<InstanceTime>,
     times: Vec<Vec<TimeData>>,
 }
 
@@ -413,8 +422,9 @@ impl Instance {
                 .filter_map(|line| {
                     let line = line.trim();
                     if let Some(rest) = line.strip_prefix(&prefix) {
-                        let time = Duration::from_micros(str::parse(rest).unwrap());
-                        Some(time.as_secs_f64())
+                        let time: InstanceTime =
+                            serde_json::from_str(rest).expect("failed to parse timing result");
+                        Some(time)
                     } else {
                         None
                     }
@@ -435,7 +445,7 @@ impl Instance {
                 display
                     .lock()
                     .unwrap()
-                    .report(self.config_index, self.build_index, time)
+                    .report(self.config_index, self.build_index, time.duration)
             });
 
             //println!("Ran {} in {:.04}s", self.display(), time);
@@ -499,7 +509,9 @@ impl Instance {
     fn result(&self) -> ResultConfig {
         ResultConfig {
             build: self.build.name.clone(),
-            time: self.time.clone(),
+            time: self.time.iter().map(|t| t.duration).collect(),
+            peak_physical: self.time.iter().map(|t| t.peak_physical).collect(),
+            peak_committed: self.time.iter().map(|t| t.peak_committed).collect(),
             times: if self.config.details {
                 Some(self.times.clone())
             } else {

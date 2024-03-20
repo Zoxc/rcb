@@ -163,7 +163,7 @@ function escapeHTML(str) {
 }
 
 function build_details() {
-    const BENIGN_OPTS = ['changelog-seen', 'rust.deny-warnings', 'rust.deny-warnings', 'build.low-priority'];
+    const BENIGN_OPTS = ['changelog-seen', 'change-id', 'rust.deny-warnings', 'rust.deny-warnings', 'build.low-priority'];
 
     function linearize(keys, path, out) {
         for (const key in keys) {
@@ -249,6 +249,7 @@ function build_details() {
         let build = DATA.builds[i];
         result += `<div class="build"><h3>Build <b>${build.name}</b></h3>`;
         result += `<div class="split"><p>From repo:</p><p><b>${build.repo}</b> at ${build.repo_path}</p></div>`;
+        result += `<div class="split"><p>Stage:</p><p><b>${build.stage}</b></p></div>`;
 
         result += `<div class="split"><p>Git commit title:</p><p><b>${build.commit_title}</b></p></div>`;
         result += `<div class="split"><p>Git commit:</p><p><b>${build.commit_short}</b></p></div>`;
@@ -427,85 +428,104 @@ function export_bench_times() {
 }
 
 function summary_shared(md) {
+    let include_mem = DATA.benchs[0].builds[0].peak_physical != null;
+
     let summary = {
         type: 'Benchmark',
         columns: [{ name: 'Time', format: format_time }],
         rows: DATA.benchs.map(bench => {
-            let times = bench.builds.map(build => average_by(build.time));
-            let rss;
-            if (DETAILS) {
-                rss = bench.builds.map(build => average_by(build.times, rss => max_rss(rss)))
+            let columns = [bench.builds.map(build => average_by(build.time))];
+            if (include_mem) {
+                columns.push(bench.builds.map(build => average_by(build.peak_physical)));
+                columns.push(bench.builds.map(build => average_by(build.peak_committed)));
             };
             let name = (DETAILS && !md) ? `<a href="#${bench.name}">${format_bench(bench.name)}</a>` : format_bench(bench.name, md);
-            return { name: name, columns: DETAILS ? [times, rss] : [times] };
+            return { name: name, columns: columns };
         })
     };
 
-    if (DETAILS) {
-        summary.columns.push({ name: 'Memory', format: format_size });
+    if (include_mem) {
+        summary.columns.push({ name: 'Physical Memory', format: format_size });
+        summary.columns.push({ name: 'Committed Memory', format: format_size });
     }
 
     let total = DATA.benchs.map(bench => {
         let times = bench.builds.map(build => average_by(build.time));
-
-        let rss;
-        if (DETAILS) {
-            rss = bench.builds.map(build => average_by(build.times, time => max_rss(time)));
-        } else {
-            rss = bench.builds.map(build => 0);
-        }
-        return { time: times, rss: rss };
+        let peak_physical = bench.builds.map(build => 0);
+        let peak_committed = bench.builds.map(build => 0);
+        if (include_mem) {
+            peak_physical = bench.builds.map(build => average_by(build.peak_physical));
+            peak_committed = bench.builds.map(build => average_by(build.peak_committed));
+        };
+        return { time: times, peak_physical: peak_physical, peak_committed: peak_committed };
     });
 
     let total_r = total.reduce((sum, v) => {
         return sum.map((sum, i) => {
-            return { time: sum.time + v.time[i], rss: sum.rss + v.rss[i] };
+            return {
+                time: sum.time + v.time[i],
+                peak_physical: sum.peak_physical + v.peak_physical[i],
+                peak_committed: sum.peak_committed + v.peak_committed[i]
+            };
         });
-    }, DATA.benchs[0].builds.map(bench => { return { time: 0, rss: 0 }; }));
+    }, DATA.benchs[0].builds.map(bench => { return { time: 0, peak_physical: 0, peak_committed: 0 }; }));
 
-    if (DETAILS) {
-        summary.rows.push({
-            name: `Total`, columns: [total_r.map(build => build.time), total_r.map(build => build.rss)]
-        });
-    } else {
-        summary.rows.push({
-            name: `Total`, columns: [total_r.map(build => build.time)]
-        });
+    console.log("total", total, " total_r", total_r);
+
+    let total_columns = [total_r.map(build => build.time)];
+    if (include_mem) {
+        total_columns.push(total_r.map(build => build.peak_physical))
+        total_columns.push(total_r.map(build => build.peak_committed))
     }
+    summary.rows.push({
+        name: `Total`, columns: total_columns,
+    });
 
     let times = DATA.benchs.map(bench => {
         let first = average_by(bench.builds[0].time);
         let times = bench.builds.map(build => average_by(build.time) / first);
 
-        let rss;
-        if (DETAILS) {
-            let first_rss = average_by(bench.builds[0].times, rss => max_rss(rss));
-            rss = bench.builds.map(build => average_by(build.times, rss => max_rss(rss)) / first_rss);
-        } else {
-            rss = bench.builds.map(build => 0);
-        }
-        return { time: times, rss: rss };
+        let peak_physical = bench.builds.map(build => 0);
+        let peak_committed = bench.builds.map(build => 0);
+        if (include_mem) {
+            let first_peak_physical = average_by(bench.builds[0].peak_physical);
+            peak_physical = bench.builds.map(build => average_by(build.peak_physical) / first_peak_physical);
+            let first_peak_committed = average_by(bench.builds[0].peak_committed);
+            peak_committed = bench.builds.map(build => average_by(build.peak_committed) / first_peak_committed);
+        };
+
+        return { time: times, peak_physical: peak_physical, peak_committed: peak_committed };
     });
 
     let times_r = times.reduce((sum, v) => {
         return sum.map((sum, i) => {
-            return { time: sum.time + v.time[i], rss: sum.rss + v.rss[i] };
+            return {
+                time: sum.time + v.time[i],
+                peak_physical: sum.peak_physical + v.peak_physical[i],
+                peak_committed: sum.peak_committed + v.peak_committed[i]
+            };
         });
-    }, DATA.benchs[0].builds.map(bench => { return { time: 0, rss: 0 }; }));
+    }, DATA.benchs[0].builds.map(bench => { return { time: 0, peak_physical: 0, peak_committed: 0 }; }));
 
     let times_a = times_r.map(build => {
-        return { time: build.time / DATA.benchs.length, rss: build.rss / DATA.benchs.length };
+        return {
+            time: build.time / DATA.benchs.length,
+            peak_physical: build.peak_physical / DATA.benchs.length,
+            peak_committed: build.peak_committed / DATA.benchs.length,
+        };
     });
 
-    if (DETAILS) {
-        summary.rows.push({
-            name: `Summary`, columns: [times_a.map(build => build.time), times_a.map(build => build.rss)]
-        });
-    } else {
-        summary.rows.push({
-            name: `Summary`, columns: [times_a.map(build => build.time)]
-        });
+    let average_columns = [times_a.map(build => build.time)];
+    if (include_mem) {
+        average_columns.push(times_a.map(build => build.peak_physical));
+        average_columns.push(times_a.map(build => build.peak_committed));
     }
+    summary.rows.push({
+        name: `Summary`, columns: average_columns,
+    });
+
+    console.log(summary);
+
 
     return summary;
 }
