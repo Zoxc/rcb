@@ -368,7 +368,10 @@ impl Instance {
         remove_fingerprint(fingerprints, krate);
 
         if self.config.incremental == IncrementalMode::Initial {
-            let incremental = crate_matches(&target_profile.join("incremental"), krate);
+            let incremental = crate_matches(
+                &target_profile.join("incremental"),
+                &krate.replace('-', "_"),
+            );
 
             remove_fingerprint(incremental, krate);
         }
