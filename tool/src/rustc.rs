@@ -1,9 +1,10 @@
 use crate::bench::InstanceTime;
-use std::{env, mem, os::windows::io::AsRawHandle, process::Command, time::Instant};
+use std::{env, process::Command, time::Instant};
 
 #[cfg(windows)]
 use {
-    std::os::windows::process::CommandExt,
+    std::mem,
+    std::os::windows::{io::AsRawHandle, process::CommandExt},
     winapi::um::psapi::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
     winapi::um::winbase::HIGH_PRIORITY_CLASS,
 };
