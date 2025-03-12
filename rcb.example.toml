@@ -1,4 +1,4 @@
-benchs = ["clap", "hyper", "regex", "syn", "syntex_syntax"]
+benchs = ["clap", "hyper", "regex", "syn"]
 
 [repo.a]
 path = "/path/to/a"
