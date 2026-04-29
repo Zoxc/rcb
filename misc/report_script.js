@@ -428,24 +428,31 @@ function export_bench_times() {
 }
 
 function summary_shared(md) {
-    let include_mem = DATA.benchs[0].builds[0].peak_physical != null;
+    let include_physical_mem = DATA.benchs[0].builds[0].peak_physical != null;
+    let include_committed_mem = DATA.benchs.every(bench => {
+        return bench.builds.every(build => build.peak_committed != null);
+    });
 
     let summary = {
         type: 'Benchmark',
         columns: [{ name: 'Time', format: format_time }],
         rows: DATA.benchs.map(bench => {
             let columns = [bench.builds.map(build => average_by(build.time))];
-            if (include_mem) {
+            if (include_physical_mem) {
                 columns.push(bench.builds.map(build => average_by(build.peak_physical)));
+            }
+            if (include_committed_mem) {
                 columns.push(bench.builds.map(build => average_by(build.peak_committed)));
-            };
+            }
             let name = (DETAILS && !md) ? `<a href="#${bench.name}">${format_bench(bench.name)}</a>` : format_bench(bench.name, md);
             return { name: name, columns: columns };
         })
     };
 
-    if (include_mem) {
+    if (include_physical_mem) {
         summary.columns.push({ name: 'Physical Memory', format: format_size });
+    }
+    if (include_committed_mem) {
         summary.columns.push({ name: 'Committed Memory', format: format_size });
     }
 
@@ -453,10 +460,12 @@ function summary_shared(md) {
         let times = bench.builds.map(build => average_by(build.time));
         let peak_physical = bench.builds.map(build => 0);
         let peak_committed = bench.builds.map(build => 0);
-        if (include_mem) {
+        if (include_physical_mem) {
             peak_physical = bench.builds.map(build => average_by(build.peak_physical));
+        }
+        if (include_committed_mem) {
             peak_committed = bench.builds.map(build => average_by(build.peak_committed));
-        };
+        }
         return { time: times, peak_physical: peak_physical, peak_committed: peak_committed };
     });
 
@@ -473,8 +482,10 @@ function summary_shared(md) {
     console.log("total", total, " total_r", total_r);
 
     let total_columns = [total_r.map(build => build.time)];
-    if (include_mem) {
+    if (include_physical_mem) {
         total_columns.push(total_r.map(build => build.peak_physical))
+    }
+    if (include_committed_mem) {
         total_columns.push(total_r.map(build => build.peak_committed))
     }
     summary.rows.push({
@@ -487,12 +498,14 @@ function summary_shared(md) {
 
         let peak_physical = bench.builds.map(build => 0);
         let peak_committed = bench.builds.map(build => 0);
-        if (include_mem) {
+        if (include_physical_mem) {
             let first_peak_physical = average_by(bench.builds[0].peak_physical);
             peak_physical = bench.builds.map(build => average_by(build.peak_physical) / first_peak_physical);
+        }
+        if (include_committed_mem) {
             let first_peak_committed = average_by(bench.builds[0].peak_committed);
             peak_committed = bench.builds.map(build => average_by(build.peak_committed) / first_peak_committed);
-        };
+        }
 
         return { time: times, peak_physical: peak_physical, peak_committed: peak_committed };
     });
@@ -516,8 +529,10 @@ function summary_shared(md) {
     });
 
     let average_columns = [times_a.map(build => build.time)];
-    if (include_mem) {
+    if (include_physical_mem) {
         average_columns.push(times_a.map(build => build.peak_physical));
+    }
+    if (include_committed_mem) {
         average_columns.push(times_a.map(build => build.peak_committed));
     }
     summary.rows.push({
