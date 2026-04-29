@@ -110,6 +110,22 @@ fn sha256_from_file(path: &Path, context: &mut Context) -> io::Result<()> {
     sha256_digest(reader, context)
 }
 
+fn read_repo_config(repo_path: &Path) -> toml::Value {
+    for name in &["config.toml", "bootstrap.toml"] {
+        let path = repo_path.join(name);
+        if path.exists() {
+            let config = t!(fs::read_to_string(&path));
+            return toml::from_str(&config).unwrap_or_else(|_| panic!("Invalid {}", name));
+        }
+    }
+
+    panic!(
+        "Could not find config file at `{}` or `{}`",
+        repo_path.join("config.toml").display(),
+        repo_path.join("bootstrap.toml").display(),
+    );
+}
+
 fn get_build_signature(dir: &Path) -> (String, u64, Vec<BuildFile>) {
     let mut files = Vec::new();
 
@@ -187,10 +203,7 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
 
     let repo_path = state.repo_path(&repo);
 
-    let config: toml::Value = {
-        let config = t!(fs::read_to_string(repo_path.join("config.toml")));
-        toml::from_str(&config).expect("Invalid config.toml")
-    };
+    let config = read_repo_config(&repo_path);
 
     let triple = config
         .get("build")
@@ -263,9 +276,6 @@ pub fn fetch(state: Arc<State>, matches: &ArgMatches) {
     t!(fs::rename(&tmp_path, &build_path));
 
     {
-        let config = t!(fs::read_to_string(repo_path.join("config.toml")));
-        let config: toml::Value = toml::from_str(&config).expect("Invalid config.toml");
-
         let build = Build {
             name: name.clone(),
             path: format!("stage{stage}"),
