@@ -1,6 +1,9 @@
 use crate::bench::InstanceTime;
 use std::{env, process::Command, time::Instant};
 
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+
 #[cfg(windows)]
 use {
     std::mem,
@@ -42,26 +45,25 @@ pub fn run() -> ! {
         cmd.arg("-Ztime-passes-format=json");
     }
 
+    let mut time = InstanceTime {
+        duration: 0.0,
+        peak_committed: None,
+        peak_physical: None,
+    };
+
     let start = Instant::now();
 
     let prefix = env::var("RCB_TIME_PREFIX").ok();
 
     let mut child = cmd.spawn().expect("failed to execute the real rustc");
 
-    let status = child.wait().expect("failed to wait for the real rustc");
-
-    let duration = start.elapsed();
-
-    let mut time = InstanceTime {
-        duration: duration.as_secs_f64(),
-        peak_committed: None,
-        peak_physical: None,
-    };
-
     #[cfg(windows)]
-    {
+    let status = {
+        let status = child.wait().expect("failed to wait for the real rustc");
+        time.duration = start.elapsed().as_secs_f64();
+
+        let handle = child.as_raw_handle();
         unsafe {
-            let handle = child.as_raw_handle();
             let mut counters: PROCESS_MEMORY_COUNTERS = mem::zeroed();
             counters.cb = mem::size_of_val(&counters) as u32;
             if GetProcessMemoryInfo(handle, &mut counters, mem::size_of_val(&counters) as u32) != 0
@@ -70,7 +72,34 @@ pub fn run() -> ! {
                 time.peak_physical = Some(counters.PeakWorkingSetSize);
             }
         }
-    }
+        status
+    };
+
+    #[cfg(unix)]
+    let status = unsafe {
+        let mut status = 0;
+        let mut usage = std::mem::zeroed::<libc::rusage>();
+        if libc::wait4(child.id() as libc::pid_t, &mut status, 0, &mut usage) == -1 {
+            panic!(
+                "failed to wait for the real rustc: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+
+        time.duration = start.elapsed().as_secs_f64();
+
+        #[cfg(target_os = "linux")]
+        {
+            time.peak_physical = (usage.ru_maxrss as usize).checked_mul(1024);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            time.peak_physical = Some(usage.ru_maxrss as usize);
+        }
+
+        std::process::ExitStatus::from_raw(status)
+    };
 
     prefix.map(|prefix| eprintln!("\n{}{}", prefix, serde_json::to_string(&time).unwrap()));
 
