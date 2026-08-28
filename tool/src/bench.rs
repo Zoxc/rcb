@@ -157,6 +157,47 @@ fn crate_matches(path: &Path, krate: &str) -> Vec<(String, PathBuf)> {
         .collect()
 }
 
+/// Finds the build units of `krate` in the new layout, skipping build script units.
+///
+/// Each unit directory holds exactly one fingerprint hash file, named `<flavor><kind>-<target>`,
+/// which is what identifies the unit's kind.
+fn crate_units(target_profile: &Path, krate: &str) -> Vec<(String, PathBuf)> {
+    let pkg_dir = target_profile.join("build").join(krate);
+
+    if !pkg_dir.is_dir() {
+        panic!(
+            "Didn't find a build directory for {} at {:?}",
+            krate, pkg_dir
+        );
+    }
+
+    t!(fs::read_dir(&pkg_dir))
+        .filter_map(|f| {
+            let fingerprint = t!(f).path().join("fingerprint");
+
+            // Build scripts share the package directory with the crate itself. They have `kind`
+            // `build-script`, with the `run-` flavor for the unit which executes the script.
+            let is_build_script = t!(fs::read_dir(&fingerprint)).any(|f| {
+                let name = t!(f).file_name().to_string_lossy().into_owned();
+                name.starts_with("build-script-") || name.starts_with("run-build-script-")
+            });
+
+            if is_build_script {
+                return None;
+            }
+
+            let name = fingerprint
+                .parent()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
+            Some((name, fingerprint))
+        })
+        .collect()
+}
+
 fn remove_fingerprint(mut fingerprints: Vec<(String, PathBuf)>, krate: &str) {
     if fingerprints.len() != 1 {
         panic!(
@@ -353,17 +394,25 @@ impl Instance {
 
         let krate = &self.config.bench.name;
 
-        let build_scripts = crate_matches(&target_profile.join("build"), krate);
+        // `prepare` has already built here, so the tree itself says which layout cargo used.
+        // Cargo 1.100 and later group build files by unit and don't write `.fingerprint` at all.
+        let fingerprints = if target_profile.join(".fingerprint").is_dir() {
+            let build_scripts = crate_matches(&target_profile.join("build"), krate);
 
-        let mut fingerprints = crate_matches(&target_profile.join(".fingerprint"), krate);
+            let mut fingerprints = crate_matches(&target_profile.join(".fingerprint"), krate);
 
-        // Remove build scripts which can share the name of the main crate
-        fingerprints.retain(|(name, _)| {
-            build_scripts
-                .iter()
-                .find(|(build, _)| name == build)
-                .is_none()
-        });
+            // Remove build scripts which can share the name of the main crate
+            fingerprints.retain(|(name, _)| {
+                build_scripts
+                    .iter()
+                    .find(|(build, _)| name == build)
+                    .is_none()
+            });
+
+            fingerprints
+        } else {
+            crate_units(&target_profile, krate)
+        };
 
         remove_fingerprint(fingerprints, krate);
 
